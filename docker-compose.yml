@@ -2,3 +2,7 @@ services:
   dynamic-customer-segmentation:
     container_name: dynamic-customer-segmentation
     build: .
+    env_file:
+      - .env
+    ports:
+      - "${HTTP_PORT}:${HTTP_PORT}"
