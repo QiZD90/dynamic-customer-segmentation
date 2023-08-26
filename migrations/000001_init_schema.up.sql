@@ -1,7 +1,8 @@
 CREATE TABLE segments (
     id SERIAL PRIMARY KEY NOT NULL UNIQUE,
     slug TEXT NOT NULL UNIQUE,
-    created_at TIMESTAMP NOT NULL DEFAULT NOW()
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    deleted_at TIMESTAMP
 );
 
 CREATE TABLE users_segments (

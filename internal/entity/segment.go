@@ -3,12 +3,13 @@ package entity
 import "time"
 
 type Segment struct {
-	Slug      string
-	CreatedAt time.Time
-	DeletedAt time.Time
+	Slug      string     `json:"slug"`
+	CreatedAt time.Time  `json:"created_at"`
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 type SegmentExpiration struct {
-	Slug      string
-	ExpiresAt time.Time
+	Slug      string    `json:"slug"`
+	ExpiresAt time.Time `json:"expires_at,omitempty"`
 }

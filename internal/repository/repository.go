@@ -7,21 +7,23 @@ import (
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/entity"
 )
 
+// !!NOTE!!: these errors are only used by service package that substitutes
+// them for its own equivalents
 var (
-	ErrSegmentAlreadyExists = errors.New("segment with this slug already exists")
-	ErrNoSuchSegment        = errors.New("segment with this slug doesn't exist")
+	ErrAlreadyExists = errors.New("segment with this slug already exists")
+	ErrNotFound      = errors.New("segment with this slug doesn't exist")
 )
 
 type Repository interface {
 	// CreateSegment creates a segment with specified slug.
-	// If there is a segment with this slug already, returns `ErrSegmentAlreadyExists`
+	// If there is a segment with this slug already, returns `ErrAlreadyExists`
 	CreateSegment(slug string) error
 
 	// CreateSegmentAndEnroll creates a segment with specified slug and adds it to users with specified IDs
 	CreateSegmentAndEnroll(slug string, userIDs []int) error
 
 	// DeleteSegment marks segment as deleted and marks all records with it as deleted
-	// Returns `ErrNoSuchSegment` if there is no segment by this slug
+	// Returns `ErrNotFound` if there is no segment by this slug
 	DeleteSegment(slug string) error
 
 	// UpdateUserSegments adds and removes segments to/from user with expiration date

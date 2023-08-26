@@ -1,6 +1,8 @@
 package v1
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/service"
@@ -46,6 +48,102 @@ func (routes *Routes) NotFoundHandler(w http.ResponseWriter, r *http.Request) {
 	respondWithJson(w, http.StatusMethodNotAllowed, j)
 }
 
-func (routes *Routes) IndexHandler(w http.ResponseWriter, r *http.Request) {
-	respondWithJson(w, http.StatusOK, &JsonMessage{"CHANGE DA WORLD. MY FINAL MESSAGE. GOODBYE."})
+// POST /segment/create
+func (routes *Routes) SegmentCreateHandler(w http.ResponseWriter, r *http.Request) {
+	var j JsonCreateSegmentRequest
+	if err := json.NewDecoder(r.Body).Decode(&j); err != nil {
+		log.Error().Err(err).Msg("")
+		respondWithJson(w, http.StatusBadRequest, &JsonError{http.StatusBadRequest, "Error while unmarshalling request JSON"})
+	}
+	defer r.Body.Close()
+
+	if err := routes.s.CreateSegment(j.Slug); err != nil {
+		log.Error().Err(err).Msg("")
+
+		if errors.Is(err, service.ErrSegmentAlreadyExists) {
+			respondWithJson(w, http.StatusBadRequest, &JsonError{http.StatusBadRequest, "Segment already exists"})
+		} else {
+			internalServerError(w)
+		}
+
+		return
+	}
+
+	respondWithJson(w, http.StatusOK, &JsonStatus{"OK"})
+}
+
+// POST /segment/delete
+func (routes *Routes) SegmentDeleteHandler(w http.ResponseWriter, r *http.Request) {
+	var j JsonDeleteSegmentRequest
+	if err := json.NewDecoder(r.Body).Decode(&j); err != nil {
+		log.Error().Err(err).Msg("")
+		respondWithJson(w, http.StatusBadRequest, &JsonError{http.StatusBadRequest, "Error while unmarshalling request JSON"})
+	}
+	defer r.Body.Close()
+
+	if err := routes.s.DeleteSegment(j.Slug); err != nil {
+		log.Error().Err(err).Msg("")
+
+		if errors.Is(err, service.ErrSegmentNotFound) {
+			respondWithJson(w, http.StatusBadRequest, &JsonError{http.StatusBadRequest, "Segment wasn't found"})
+		} else {
+			internalServerError(w)
+		}
+
+		return
+	}
+
+	respondWithJson(w, http.StatusOK, &JsonStatus{"OK"})
+}
+
+// TODO: following JSON shouldn't be valid
+//
+//	{
+//	  "user_id": 1000,
+//	  "addSegments": [],
+//	  "removeSegments": ["AVITO_SALE_30"]
+//	}
+//
+// POST /user/update
+func (routes *Routes) UserUpdateHandler(w http.ResponseWriter, r *http.Request) {
+	var j JsonUserUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&j); err != nil {
+		log.Error().Err(err).Msg("")
+		respondWithJson(w, http.StatusBadRequest, &JsonError{http.StatusBadRequest, "Error while unmarshalling request JSON"})
+	}
+	defer r.Body.Close()
+
+	if err := routes.s.UpdateUserSegments(j.UserID, j.AddSegments, j.RemoveSegments); err != nil {
+		log.Error().Err(err).Msg("")
+
+		if errors.Is(err, service.ErrInvalidSegmentList) {
+			respondWithJson(w, http.StatusBadRequest, &JsonError{http.StatusBadRequest, "Supplied segment lists are invalid"})
+		} else {
+			internalServerError(w)
+		}
+
+		return
+	}
+
+	respondWithJson(w, http.StatusOK, &JsonStatus{"OK"})
+}
+
+// GET /user/segments
+func (routes *Routes) UserSegmentsHandler(w http.ResponseWriter, r *http.Request) {
+	var j JsonUserSegmentsHandler
+	if err := json.NewDecoder(r.Body).Decode(&j); err != nil {
+		log.Error().Err(err).Msg("")
+		respondWithJson(w, http.StatusBadRequest, &JsonError{http.StatusBadRequest, "Error while unmarshalling request JSON"})
+	}
+	defer r.Body.Close()
+
+	segments, err := routes.s.GetUserActiveSegments(j.UserID)
+	if err != nil {
+		log.Error().Err(err).Msg("")
+		internalServerError(w)
+
+		return
+	}
+
+	respondWithJson(w, http.StatusOK, &JsonUserSegments{segments})
 }

@@ -1,6 +1,10 @@
 package v1
 
-import "encoding/json"
+import (
+	"encoding/json"
+
+	"github.com/QiZD90/dynamic-customer-segmentation/internal/entity"
+)
 
 type JsonResponse interface {
 	Bytes() ([]byte, error)
@@ -28,5 +32,13 @@ type JsonMessage struct {
 }
 
 func (j *JsonMessage) Bytes() ([]byte, error) {
+	return json.Marshal(j)
+}
+
+type JsonUserSegments struct {
+	Segments []entity.Segment `json:"segments"`
+}
+
+func (j *JsonUserSegments) Bytes() ([]byte, error) {
 	return json.Marshal(j)
 }

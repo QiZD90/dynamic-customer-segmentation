@@ -26,7 +26,10 @@ func NewMux(s *service.Service) http.Handler {
 func apiMux(routes *Routes) http.Handler {
 	mux := chi.NewMux()
 
-	mux.Get("/", routes.IndexHandler)
+	mux.Post("/segment/create", routes.SegmentCreateHandler)
+	mux.Post("/segment/delete", routes.SegmentDeleteHandler)
+	mux.Post("/user/update", routes.UserUpdateHandler)
+	mux.Get("/user/segments", routes.UserSegmentsHandler)
 
 	return mux
 }
