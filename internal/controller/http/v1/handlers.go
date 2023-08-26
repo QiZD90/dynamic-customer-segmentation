@@ -11,9 +11,12 @@ type Routes struct {
 	s *service.Service
 }
 
-// Used only in case of marshalling of a json error failing
+// Uses manual JSON formatting since this function can be called if marshalling
+// actual json error data fails
 func internalServerError(w http.ResponseWriter) {
-	http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+	w.Header().Add("Content-Type", "application/json")
+	w.WriteHeader(http.StatusInternalServerError)
+	w.Write([]byte("{\"status_code\": 500, \"error_message\": \"Internal server error\"}"))
 }
 
 func respondWithJson(w http.ResponseWriter, statusCode int, j JsonResponse) {
@@ -27,6 +30,10 @@ func respondWithJson(w http.ResponseWriter, statusCode int, j JsonResponse) {
 	w.Header().Add("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
 	w.Write(b)
+}
+
+func (routes *Routes) HealthHandler(w http.ResponseWriter, r *http.Request) {
+	respondWithJson(w, http.StatusOK, &JsonStatus{"OK"})
 }
 
 func (routes *Routes) MethodNotAllowedHandler(w http.ResponseWriter, r *http.Request) {

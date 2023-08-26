@@ -15,4 +15,5 @@ RUN go build -o dynamic-customer-segmentation cmd/app/main.go
 FROM alpine
 WORKDIR /app
 COPY --from=build /build/dynamic-customer-segmentation .
+COPY migrations/* ./migrations/
 CMD ["./dynamic-customer-segmentation"]

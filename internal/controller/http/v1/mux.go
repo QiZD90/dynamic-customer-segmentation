@@ -12,10 +12,21 @@ func NewMux(s *service.Service) http.Handler {
 	mux := chi.NewMux()
 
 	routes := &Routes{s: s}
+
 	mux.Use(middleware.Logger)
-	mux.Get("/", routes.IndexHandler)
+	mux.Get("/health", routes.HealthHandler)
 	mux.MethodNotAllowed(routes.MethodNotAllowedHandler)
 	mux.NotFound(routes.NotFoundHandler)
+
+	mux.Mount("/api/v1", apiMux(routes))
+
+	return mux
+}
+
+func apiMux(routes *Routes) http.Handler {
+	mux := chi.NewMux()
+
+	mux.Get("/", routes.IndexHandler)
 
 	return mux
 }

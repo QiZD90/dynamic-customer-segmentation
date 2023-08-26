@@ -15,6 +15,14 @@ func (j *JsonError) Bytes() ([]byte, error) {
 	return json.Marshal(j)
 }
 
+type JsonStatus struct {
+	Status string `json:"status"`
+}
+
+func (j *JsonStatus) Bytes() ([]byte, error) {
+	return json.Marshal(j)
+}
+
 type JsonMessage struct {
 	Message string `json:"message"`
 }
