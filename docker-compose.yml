@@ -1,0 +1,4 @@
+services:
+  dynamic-customer-segmentation:
+    container_name: dynamic-customer-segmentation
+    build: .
