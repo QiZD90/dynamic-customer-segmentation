@@ -6,6 +6,8 @@ services:
       - .env
     ports:
       - "${HTTP_PORT}:${HTTP_PORT}"
+    volumes:
+      - csv-ondisk:/app/csv
     depends_on:
       postgres:
         condition: service_healthy
@@ -27,3 +29,4 @@ services:
   
 volumes:
   pg-data:
+  csv-ondisk:
