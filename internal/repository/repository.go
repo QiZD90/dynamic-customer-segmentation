@@ -28,6 +28,7 @@ type Repository interface {
 
 	GetActiveUserSegments(userID int) ([]entity.UserSegment, error)
 
-	// DumpHistory returns all operations related to given users that occurred in specified time span
-	DumpHistory(userIDs []int, timeFrom time.Time, timeTo time.Time) ([]entity.Operation, error)
+	// DumpHistory returns all operations related to a given user that occurred in specified time span
+	// sorted by operation time
+	DumpHistory(userID int, timeFrom time.Time, timeTo time.Time) ([]entity.Operation, error)
 }

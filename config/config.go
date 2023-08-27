@@ -25,6 +25,8 @@ type PostgresConfig struct {
 }
 
 type OnDiskConfig struct {
+	BaseURL       string `env:"ONDISK_BASE_URL" envDefault:"http://localhost:80/csv/"`
+	DirectoryPath string `evn:"ONDISK_DIRECTORY_PATH" envDefault:"csv/"`
 }
 
 func Parse() (*Config, error) {

@@ -7,6 +7,8 @@ import (
 
 	"github.com/QiZD90/dynamic-customer-segmentation/config"
 	v1 "github.com/QiZD90/dynamic-customer-segmentation/internal/controller/http/v1"
+	"github.com/QiZD90/dynamic-customer-segmentation/internal/filestorage"
+	"github.com/QiZD90/dynamic-customer-segmentation/internal/filestorage/ondisk"
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/repository/postgres"
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/service"
 	"github.com/golang-migrate/migrate/v4"
@@ -19,13 +21,19 @@ func main() {
 	// Parse config
 	cfg, err := config.Parse()
 	if err != nil {
-		log.Fatal().Err(err).Msg("")
+		log.Fatal().Err(err).Msg("error while parsing config")
 	}
 
 	// Create repository
 	repo, err := postgres.New(cfg.Postgres.Addr)
 	if err != nil {
-		log.Fatal().Err(err).Msg("")
+		log.Fatal().Err(err).Msg("error while connecting to postgres")
+	}
+
+	// Create filestorage
+	fstorage, err := ondisk.New(cfg.OnDisk.BaseURL, cfg.OnDisk.DirectoryPath, filestorage.NewTextFormatNameSupplier())
+	if err != nil {
+		log.Fatal().Err(err).Msg("error while creating ondisk filestorage")
 	}
 
 	// Migrate up to date
@@ -48,7 +56,7 @@ func main() {
 	}
 
 	// Instantiate service
-	s := service.New(repo)
+	s := service.New(repo, fstorage)
 
 	// Get mux
 	mux := v1.NewMux(s)

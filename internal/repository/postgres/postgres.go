@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/entity"
@@ -249,7 +250,7 @@ func (p *PostgresRepository) GetActiveUserSegments(userID int) ([]entity.UserSeg
 		return nil, fmt.Errorf("GetActiveUserSegments() - p.db.Query(): %w", err)
 	}
 
-	userSegments := make([]entity.UserSegment, 0)
+	userSegments := make([]entity.UserSegment, 0, 30)
 	for rows.Next() {
 		var userSegment entity.UserSegment
 		var expiresAt sql.NullTime
@@ -267,8 +268,56 @@ func (p *PostgresRepository) GetActiveUserSegments(userID int) ([]entity.UserSeg
 	return userSegments, nil
 }
 
-func (p *PostgresRepository) DumpHistory(userIDs []int, timeFrom time.Time, timeTo time.Time) ([]entity.Operation, error) { // TODO
-	return nil, nil
+func (p *PostgresRepository) DumpHistory(userID int, timeFrom time.Time, timeTo time.Time) ([]entity.Operation, error) {
+	rows, err := p.db.Query(
+		`SELECT (SELECT slug FROM segments WHERE id=segment_id), user_id, added_at, removed_at, expires_at
+		FROM users_segments
+		WHERE user_id=$1`, userID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("DumpHistory() - p.db.Query(): %w", err)
+	}
+
+	operations := make([]entity.Operation, 0, 30)
+	for rows.Next() {
+		var slug string
+		var userID int
+		var addedAt time.Time
+		var removedAt sql.NullTime
+		var expiresAt sql.NullTime
+
+		rows.Scan(&slug, &userID, &addedAt, &removedAt, &expiresAt)
+
+		operations = append(operations, entity.Operation{
+			UserID:      userID,
+			SegmentSlug: slug,
+			Type:        entity.AddedOperationType,
+			Time:        addedAt,
+		})
+
+		if removedAt.Valid {
+			operations = append(operations, entity.Operation{
+				UserID:      userID,
+				SegmentSlug: slug,
+				Type:        entity.RemovedOperationType,
+				Time:        removedAt.Time,
+			})
+		}
+
+		if expiresAt.Valid && expiresAt.Time.Before(time.Now()) {
+			operations = append(operations, entity.Operation{
+				UserID:      userID,
+				SegmentSlug: slug,
+				Type:        entity.ExpiredOperationType,
+				Time:        expiresAt.Time,
+			})
+		}
+	}
+
+	// sort by operation time ascending
+	sort.Slice(operations, func(i, j int) bool { return operations[i].Time.Before(operations[j].Time) })
+
+	return operations, nil
 }
 
 func (p *PostgresRepository) GetAllActiveSegments() ([]entity.Segment, error) {
@@ -294,7 +343,7 @@ func (p *PostgresRepository) GetAllSegments() ([]entity.Segment, error) {
 		return nil, fmt.Errorf("GetAllSegments() - p.db.Query(): %w", err)
 	}
 
-	segments := make([]entity.Segment, 0)
+	segments := make([]entity.Segment, 0, 30)
 	for rows.Next() {
 		var segment entity.Segment
 		var deletedAt sql.NullTime

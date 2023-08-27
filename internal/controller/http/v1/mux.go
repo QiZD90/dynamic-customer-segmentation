@@ -12,9 +12,11 @@ func NewMux(s service.Service) http.Handler {
 	mux := chi.NewMux()
 
 	routes := &Routes{s: s}
+	fs := http.FileServer(http.Dir("csv"))
 
 	mux.Use(middleware.Logger)
 	mux.Get("/health", routes.HealthHandler)
+	mux.Handle("/csv/*", routes.CSVOnDiskHandlerWrapper(fs))
 	mux.MethodNotAllowed(routes.MethodNotAllowedHandler)
 	mux.NotFound(routes.NotFoundHandler)
 
@@ -32,6 +34,7 @@ func apiMux(routes *Routes) http.Handler {
 	mux.Post("/segment/delete", routes.SegmentDeleteHandler)
 	mux.Post("/user/update", routes.UserUpdateHandler)
 	mux.Get("/user/segments", routes.UserSegmentsHandler)
+	mux.Get("/user/csv", routes.UserCSVHandler)
 
 	return mux
 }

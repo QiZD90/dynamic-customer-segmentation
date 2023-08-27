@@ -16,6 +16,17 @@ type JsonUserUpdateRequest struct {
 	RemoveSegments []entity.SegmentExpiration `json:"remove_segments"`
 }
 
-type JsonUserSegmentsHandler struct {
+type JsonUserSegmentsHandlerRequest struct {
 	UserID int `json:"user_id"`
+}
+
+type JsonDate struct {
+	Month int `json:"month"`
+	Year  int `json:"year"`
+}
+
+type JsonUserCSVRequest struct {
+	UserID   int      `json:"user_id"`
+	FromDate JsonDate `json:"from"`
+	ToDate   JsonDate `json:"to"`
 }

@@ -5,6 +5,7 @@ go 1.21.0
 require (
 	github.com/caarlos0/env v3.5.0+incompatible
 	github.com/go-chi/chi v1.5.4
+	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/golang-migrate/migrate/v4 v4.16.2
 	github.com/jackc/pgx/v5 v5.3.1
 	github.com/rs/zerolog v1.30.0

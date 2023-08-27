@@ -35,6 +35,14 @@ func (j *JsonMessage) Bytes() ([]byte, error) {
 	return json.Marshal(j)
 }
 
+type JsonLink struct {
+	Link string `json:"link"`
+}
+
+func (j *JsonLink) Bytes() ([]byte, error) {
+	return json.Marshal(j)
+}
+
 type JsonSegments struct {
 	Segments []entity.Segment `json:"segments"`
 }
