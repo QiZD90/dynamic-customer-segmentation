@@ -55,6 +55,8 @@ func (routes *Routes) SegmentsActiveHandler(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		log.Error().Err(err).Msg("")
 		internalServerError(w)
+
+		return
 	}
 
 	respondWithJson(w, http.StatusOK, &JsonSegments{segments})
@@ -66,6 +68,8 @@ func (routes *Routes) SegmentsHandler(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Error().Err(err).Msg("")
 		internalServerError(w)
+
+		return
 	}
 
 	respondWithJson(w, http.StatusOK, &JsonSegments{segments})
@@ -77,6 +81,8 @@ func (routes *Routes) SegmentCreateHandler(w http.ResponseWriter, r *http.Reques
 	if err := json.NewDecoder(r.Body).Decode(&j); err != nil {
 		log.Error().Err(err).Msg("")
 		respondWithJson(w, http.StatusBadRequest, &JsonError{http.StatusBadRequest, "Error while unmarshalling request JSON"})
+
+		return
 	}
 	defer r.Body.Close()
 
@@ -101,6 +107,8 @@ func (routes *Routes) SegmentDeleteHandler(w http.ResponseWriter, r *http.Reques
 	if err := json.NewDecoder(r.Body).Decode(&j); err != nil {
 		log.Error().Err(err).Msg("")
 		respondWithJson(w, http.StatusBadRequest, &JsonError{http.StatusBadRequest, "Error while unmarshalling request JSON"})
+
+		return
 	}
 	defer r.Body.Close()
 
@@ -121,20 +129,13 @@ func (routes *Routes) SegmentDeleteHandler(w http.ResponseWriter, r *http.Reques
 	respondWithJson(w, http.StatusOK, &JsonStatus{"OK"})
 }
 
-// TODO: following JSON shouldn't be valid
-//
-//	{
-//	  "user_id": 1000,
-//	  "addSegments": [],
-//	  "removeSegments": ["AVITO_SALE_30"]
-//	}
-//
 // POST /user/update
 func (routes *Routes) UserUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	var j JsonUserUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&j); err != nil {
 		log.Error().Err(err).Msg("")
 		respondWithJson(w, http.StatusBadRequest, &JsonError{http.StatusBadRequest, "Error while unmarshalling request JSON"})
+		return
 	}
 	defer r.Body.Close()
 
@@ -159,6 +160,8 @@ func (routes *Routes) UserSegmentsHandler(w http.ResponseWriter, r *http.Request
 	if err := json.NewDecoder(r.Body).Decode(&j); err != nil {
 		log.Error().Err(err).Msg("")
 		respondWithJson(w, http.StatusBadRequest, &JsonError{http.StatusBadRequest, "Error while unmarshalling request JSON"})
+
+		return
 	}
 	defer r.Body.Close()
 

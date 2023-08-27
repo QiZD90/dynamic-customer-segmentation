@@ -81,7 +81,7 @@ func (p *PostgresRepository) DeleteSegment(slug string) error { // TODO:
 
 	// mark active user segments with this segment as removed
 	_, err = tx.Exec(
-		`UPDATE users_segments SET removed_at=NOW()
+		`UPDATE users_segments SET removed_at=NOW(), expires_at=NULL
 		WHERE segment_id=(SELECT id FROM segments WHERE slug=$1)
 		AND removed_at IS NULL
 		AND (expires_at IS NULL OR expires_at > NOW())`, slug)
@@ -96,13 +96,42 @@ func (p *PostgresRepository) DeleteSegment(slug string) error { // TODO:
 
 	return nil
 }
+
 func (p *PostgresRepository) UpdateUserSegments(userID int, addSegments []entity.SegmentExpiration, removeSegments []entity.SegmentExpiration) error { // TODO:
 	return nil
 }
 
-func (p *PostgresRepository) GetActiveUserSegments(userID int) ([]entity.UserSegment, error) { // TODO:
-	return nil, nil
+func (p *PostgresRepository) GetActiveUserSegments(userID int) ([]entity.UserSegment, error) {
+	rows, err := p.db.Query(
+		`SELECT (SELECT slug FROM segments WHERE id=segment_id), added_at, expires_at
+		FROM users_segments
+		WHERE user_id=$1
+		AND removed_at IS NULL
+		AND (expires_at IS NULL OR expires_at > NOW())`,
+		userID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("GetActiveUserSegments() - p.db.Query(): %w", err)
+	}
+
+	userSegments := make([]entity.UserSegment, 0)
+	for rows.Next() {
+		var userSegment entity.UserSegment
+		var expiresAt sql.NullTime
+		rows.Scan(&userSegment.Slug, &userSegment.AddedAt, &expiresAt)
+
+		if expiresAt.Valid {
+			userSegment.ExpiresAt = &expiresAt.Time
+		} else {
+			userSegment.ExpiresAt = nil
+		}
+
+		userSegments = append(userSegments, userSegment)
+	}
+
+	return userSegments, nil
 }
+
 func (p *PostgresRepository) DumpHistory(userIDs []int, timeFrom time.Time, timeTo time.Time) ([]entity.Operation, error) { // TODO
 	return nil, nil
 }
