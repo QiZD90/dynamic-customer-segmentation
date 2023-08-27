@@ -48,10 +48,32 @@ func (p *PostgresRepository) CreateSegment(slug string) error {
 }
 
 func (p *PostgresRepository) AddSegmentToUsers(slug string, userIDs []int) error { // TODO:
+	/*tx, err := p.db.Begin()
+	if err != nil {
+		return fmt.Errorf("AddSegmentToUsers() - p.db.Begin(): %w", err)
+	}
+
+	// check if segment actually exists and get its id and status
+	var id int
+	var deletedAt sql.NullTime
+	row := tx.QueryRow("SELECT id, deleted_at FROM segments WHERE slug=$1", slug)
+	if err := row.Scan(&id, &deletedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) { // segment doesn't exist
+			return repository.ErrSegmentNotFound
+		} else {
+			return fmt.Errorf("AddSegmentToUsers() - tx.QueryRow(): %w", err)
+		}
+	}
+
+	if deletedAt.Valid { // segment is already deleted
+		return repository.ErrSegmentAlreadyDeleted
+	}
+
+	*/
 	return nil
 }
 
-func (p *PostgresRepository) DeleteSegment(slug string) error { // TODO:
+func (p *PostgresRepository) DeleteSegment(slug string) error {
 	tx, err := p.db.Begin()
 	if err != nil {
 		return fmt.Errorf("DeleteSegment() - p.db.Begin(): %w", err)
@@ -97,7 +119,120 @@ func (p *PostgresRepository) DeleteSegment(slug string) error { // TODO:
 	return nil
 }
 
-func (p *PostgresRepository) UpdateUserSegments(userID int, addSegments []entity.SegmentExpiration, removeSegments []entity.SegmentExpiration) error { // TODO:
+func (p *PostgresRepository) UpdateUserSegments(userID int, addSegments []entity.SegmentExpiration, removeSegments []entity.SegmentExpiration) error {
+	tx, err := p.db.Begin()
+	if err != nil {
+		return fmt.Errorf("UpdateUserSegments() - p.db.Begin(): %w", err)
+	}
+	defer tx.Rollback()
+
+	for _, segment := range addSegments {
+		// check segment existence and status and get its id
+		var segmentID int
+		var deletedAt sql.NullTime
+		row := tx.QueryRow("SELECT id, deleted_at FROM segments WHERE slug=$1", segment.Slug)
+		if err := row.Scan(&segmentID, &deletedAt); err != nil {
+			if errors.Is(err, sql.ErrNoRows) { // no such segment at all
+				return repository.ErrSegmentNotFound
+			}
+
+			return fmt.Errorf("UpdateUserSegments() - tx.QueryRow(): %w", err)
+		}
+
+		if deletedAt.Valid { // already deleted
+			return repository.ErrSegmentAlreadyDeleted
+		}
+
+		// check if user already has the segment
+		var cnt int
+		row = tx.QueryRow(
+			`SELECT COUNT(*)
+			FROM users_segments
+			WHERE user_id=$1
+			AND segment_id=$2
+			AND removed_at IS NULL
+			AND (expires_at IS NULL OR expires_at > NOW())`,
+			userID, segmentID,
+		)
+		if err := row.Scan(&cnt); err != nil {
+			return fmt.Errorf("UpdateUserSegments() - tx.QueryRow(): %w", err)
+		}
+
+		if cnt != 0 { // segment already exists and is active
+			continue
+		}
+
+		// add the segment
+		var expiresAt sql.NullTime
+		if segment.ExpiresAt != nil {
+			expiresAt.Time = *segment.ExpiresAt
+			expiresAt.Valid = true
+		}
+		_, err := tx.Exec(
+			`INSERT INTO users_segments(segment_id, user_id, expires_at)
+			VALUES ($1, $2, $3)`,
+			segmentID, userID, expiresAt,
+		)
+
+		if err != nil {
+			return fmt.Errorf("UpdateUserSegments() - tx.Exec(): %w", err)
+		}
+	}
+
+	for _, segment := range removeSegments {
+		// check segment existence and status and get its id
+		var segmentID int
+		var deletedAt sql.NullTime
+		row := tx.QueryRow("SELECT id, deleted_at FROM segments WHERE slug=$1", segment.Slug)
+		if err := row.Scan(&segmentID, &deletedAt); err != nil {
+			if errors.Is(err, sql.ErrNoRows) { // no such segment at all
+				return repository.ErrSegmentNotFound
+			}
+
+			return fmt.Errorf("UpdateUserSegments() - tx.QueryRow(): %w", err)
+		}
+
+		if deletedAt.Valid { // already deleted
+			return repository.ErrSegmentAlreadyDeleted
+		}
+
+		// check if user already has the segment
+		var cnt int
+		row = tx.QueryRow(
+			`SELECT COUNT(*)
+			FROM users_segments
+			WHERE user_id=$1
+			AND segment_id=$2
+			AND removed_at IS NULL
+			AND (expires_at IS NULL OR expires_at > NOW())`,
+			userID, segmentID,
+		)
+		if err := row.Scan(&cnt); err != nil {
+			return fmt.Errorf("UpdateUserSegments() - tx.QueryRow(): %w", err)
+		}
+
+		if cnt == 0 { // segment doesn't exist
+			continue
+		}
+
+		// remove the segment
+		_, err := tx.Exec(
+			`UPDATE users_segments
+			SET removed_at=NOW()
+			WHERE user_id=$1
+			AND segment_id=$2`,
+			userID, segmentID,
+		)
+		if err != nil {
+			return fmt.Errorf("UpdateUserSegments() - tx.Exec(): %w", err)
+		}
+	}
+
+	// commit changes
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("UpdateUserSegments() - tx.Commit(): %w", err)
+	}
+
 	return nil
 }
 

@@ -35,6 +35,7 @@ type Service interface {
 	// UpdateUserSegments adds and removes segments to/from user with expiration date
 	// If user is already in the segment that you want to add, ignores it.
 	// If user doesn't have the segment that you want to remove, ignores it.
+	// If segment any of the segments don't exist or was deleted returns `ErrSegmentNotFound` and `ErrSegmentAlreadyDeleted`
 	UpdateUserSegments(userID int, addSegments []entity.SegmentExpiration, removeSegments []entity.SegmentExpiration) error
 
 	// GetActiveUserSegments returns active (not removed and not expired) segments that user is in
@@ -86,7 +87,14 @@ func (s *SegmentationService) UpdateUserSegments(userID int, addSegments []entit
 		return ErrInvalidSegmentList
 	}
 
-	return s.Repository.UpdateUserSegments(userID, addSegments, removeSegments)
+	err := s.Repository.UpdateUserSegments(userID, addSegments, removeSegments)
+	if errors.Is(err, repository.ErrSegmentNotFound) {
+		return ErrSegmentNotFound
+	} else if errors.Is(err, repository.ErrSegmentAlreadyDeleted) {
+		return ErrSegmentAlreadyDeleted
+	}
+
+	return err
 }
 
 func (s *SegmentationService) GetActiveUserSegments(userID int) ([]entity.UserSegment, error) {

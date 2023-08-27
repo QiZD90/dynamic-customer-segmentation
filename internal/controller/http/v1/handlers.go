@@ -144,6 +144,10 @@ func (routes *Routes) UserUpdateHandler(w http.ResponseWriter, r *http.Request) 
 
 		if errors.Is(err, service.ErrInvalidSegmentList) {
 			respondWithJson(w, http.StatusBadRequest, &JsonError{http.StatusBadRequest, "Supplied segment lists are invalid"})
+		} else if errors.Is(err, service.ErrSegmentNotFound) {
+			respondWithJson(w, http.StatusBadRequest, &JsonError{http.StatusBadRequest, "Segment wasn't found"})
+		} else if errors.Is(err, service.ErrSegmentAlreadyDeleted) {
+			respondWithJson(w, http.StatusBadRequest, &JsonError{http.StatusBadRequest, "Segment is already deleted"})
 		} else {
 			internalServerError(w)
 		}
