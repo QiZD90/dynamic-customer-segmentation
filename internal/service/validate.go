@@ -5,7 +5,7 @@ import "github.com/QiZD90/dynamic-customer-segmentation/internal/entity"
 // ValidateSegmentLists checks for segments appearing more than once in either list
 // and for segments appearing in both lists.
 // Returns `false` in either case and `true` otherwise
-func (s *Service) ValidateSegmentLists(addSegments []entity.SegmentExpiration, removeSegments []entity.SegmentExpiration) bool {
+func ValidateSegmentLists(addSegments []entity.SegmentExpiration, removeSegments []entity.SegmentExpiration) bool {
 	addSet := make(map[string]struct{})
 	removeSet := make(map[string]struct{})
 

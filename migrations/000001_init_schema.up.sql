@@ -12,6 +12,6 @@ CREATE TABLE users_segments (
     FOREIGN KEY (segment_id) REFERENCES segments(id),
 
     added_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    removed_at TIMESTAMP,
-    expires_at TIMESTAMP
+    removed_at TIMESTAMP, -- if this column is not null, this record was removed, either manually or by deleting associated segment
+    expires_at TIMESTAMP -- if this column is not null, this record has an expiration date. if the timestamp is in the past, it has already expired
 );

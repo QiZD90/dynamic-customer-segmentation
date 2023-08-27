@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"database/sql"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/entity"
@@ -16,118 +18,134 @@ type PostgresRepository struct {
 func (p *PostgresRepository) CreateSegment(slug string) error {
 	tx, err := p.db.Begin()
 	if err != nil {
-		return err
+		return fmt.Errorf("CreateSegment() - p.db.Begin(): %w", err)
 	}
 	defer tx.Rollback()
 
-	// Check if segment already exists
-	row := tx.QueryRow("SELECT COUNT(*) FROM segments WHERE slug=$1", slug)
+	// check if there is a segment under this slug
 	var cnt int
+	row := tx.QueryRow("SELECT COUNT(*) FROM segments WHERE slug=$1", slug)
 	if err := row.Scan(&cnt); err != nil {
-		return err
+		return fmt.Errorf("CreateSegment() - tx.QueryRow(): %w", err)
 	}
 
-	if cnt >= 1 {
-		return repository.ErrAlreadyExists
+	if cnt != 0 {
+		return repository.ErrSegmentAlreadyExists
 	}
 
-	// Actually create the segment
+	// create the segment
 	_, err = tx.Exec("INSERT INTO segments(slug) VALUES ($1)", slug)
 	if err != nil {
-		return err
+		return fmt.Errorf("CreateSegment() - tx.Exec(): %w", err)
 	}
 
-	// Commit the changes
+	// commit changes
 	if err := tx.Commit(); err != nil {
-		return err
+		return fmt.Errorf("CreateSegment() - tx.Commit(): %w", err)
 	}
 
 	return nil
 }
 
-func (p *PostgresRepository) CreateSegmentAndEnroll(slug string, userIDs []int) error {
+func (p *PostgresRepository) AddSegmentToUsers(slug string, userIDs []int) error { // TODO:
 	return nil
 }
 
-func (p *PostgresRepository) DeleteSegment(slug string) error {
+func (p *PostgresRepository) DeleteSegment(slug string) error { // TODO:
 	tx, err := p.db.Begin()
 	if err != nil {
-		return err
+		return fmt.Errorf("DeleteSegment() - p.db.Begin(): %w", err)
 	}
 	defer tx.Rollback()
 
-	// Check if segment already exists
-	row := tx.QueryRow("SELECT COUNT(*) FROM segments WHERE slug=$1", slug)
-	var cnt int
-	if err := row.Scan(&cnt); err != nil {
-		return err
+	// get the deletion time of this segment to check its status
+	var deletedAt sql.NullTime
+	row := tx.QueryRow("SELECT deleted_at FROM segments WHERE slug=$1", slug)
+	if err := row.Scan(&deletedAt); err != nil {
+		if errors.Is(err, sql.ErrNoRows) { // no such segment at all
+			return repository.ErrSegmentNotFound
+		}
+
+		return fmt.Errorf("CreateSegment() - tx.QueryRow(): %w", err)
 	}
 
-	if cnt < 1 {
-		return repository.ErrNotFound
+	if deletedAt.Valid { // already deleted
+		return repository.ErrSegmentAlreadyDeleted
 	}
 
-	// Mark segment as deleted
-	_, err = tx.Exec("UPDATE segments SET deleted_at = NOW() WHERE slug=$1", slug)
+	// mark the segment as deleted
+	_, err = tx.Exec("UPDATE segments SET deleted_at=NOW() WHERE slug=$1", slug)
 	if err != nil {
-		return err
+		return fmt.Errorf("DeleteSegment() - tx.Exec(): %w", err)
 	}
 
-	// Mark records with segment as removed
-	_, err = tx.Exec("UPDATE users_segments SET removed_at = NOW() WHERE segment_id IN (SELECT id AS segment_if FROM segments WHERE slug=$1)", slug)
+	// mark active user segments with this segment as removed
+	_, err = tx.Exec(
+		`UPDATE users_segments SET removed_at=NOW()
+		WHERE segment_id=(SELECT id FROM segments WHERE slug=$1)
+		AND removed_at IS NULL
+		AND (expires_at IS NULL OR expires_at > NOW())`, slug)
 	if err != nil {
-		return err
+		return fmt.Errorf("DeleteSegment() - tx.Exec(): %w", err)
 	}
 
-	// Commit the changes
+	// commit changes
 	if err := tx.Commit(); err != nil {
-		return err
+		return fmt.Errorf("DeleteSegment() - tx.Commit(): %w", err)
 	}
 
 	return nil
 }
-
-func (p *PostgresRepository) UpdateUserSegments(userID int, addSegments []entity.SegmentExpiration, removeSegments []entity.SegmentExpiration) error {
+func (p *PostgresRepository) UpdateUserSegments(userID int, addSegments []entity.SegmentExpiration, removeSegments []entity.SegmentExpiration) error { // TODO:
 	return nil
 }
 
-func (p *PostgresRepository) GetUserActiveSegments(userID int) ([]entity.Segment, error) {
-	rows, err := p.db.Query(
-		`SELECT t2.slug, t1.added_at, t1.expires_at
-		FROM users_segments AS t1
-		JOIN segments AS t2
-		ON t2.id = t1.segment_id
-		WHERE t1.user_id = $1
-		AND t1.removed_at IS NULL
-		AND (t1.expires_at IS NULL or t1.expires_at > NOW())`, userID)
+func (p *PostgresRepository) GetActiveUserSegments(userID int) ([]entity.UserSegment, error) { // TODO:
+	return nil, nil
+}
+func (p *PostgresRepository) DumpHistory(userIDs []int, timeFrom time.Time, timeTo time.Time) ([]entity.Operation, error) { // TODO
+	return nil, nil
+}
+
+func (p *PostgresRepository) GetAllActiveSegments() ([]entity.Segment, error) {
+	rows, err := p.db.Query("SELECT slug, created_at FROM segments WHERE deleted_at IS NULL")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("GetAllActiveSegments() - p.db.Query(): %w", err)
 	}
 
 	segments := make([]entity.Segment, 0)
 	for rows.Next() {
 		var segment entity.Segment
-		var nullTime sql.NullTime
-
-		rows.Scan(&segment.Slug, &segment.CreatedAt, &nullTime)
-		if nullTime.Valid {
-			segment.ExpiresAt = &nullTime.Time
-		} else {
-			segment.ExpiresAt = nil
-		}
+		rows.Scan(&segment.Slug, &segment.CreatedAt)
 
 		segments = append(segments, segment)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
 	}
 
 	return segments, nil
 }
 
-func (p *PostgresRepository) DumpHistory(userIDs []int, timeFrom time.Time, timeTo time.Time) ([]entity.Operation, error) {
-	return nil, nil
+func (p *PostgresRepository) GetAllSegments() ([]entity.Segment, error) {
+	rows, err := p.db.Query("SELECT slug, created_at, deleted_at FROM segments")
+	if err != nil {
+		return nil, fmt.Errorf("GetAllSegments() - p.db.Query(): %w", err)
+	}
+
+	segments := make([]entity.Segment, 0)
+	for rows.Next() {
+		var segment entity.Segment
+		var deletedAt sql.NullTime
+		rows.Scan(&segment.Slug, &segment.CreatedAt, &deletedAt)
+
+		if deletedAt.Valid {
+			segment.DeletedAt = &deletedAt.Time
+		} else {
+			segment.DeletedAt = nil
+		}
+
+		segments = append(segments, segment)
+	}
+
+	return segments, nil
 }
 
 func New(postgresURL string) (*PostgresRepository, error) {

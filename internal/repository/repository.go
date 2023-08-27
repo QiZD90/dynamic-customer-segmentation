@@ -10,29 +10,23 @@ import (
 // !!NOTE!!: these errors are only used by service package that substitutes
 // them for its own equivalents
 var (
-	ErrAlreadyExists = errors.New("segment with this slug already exists")
-	ErrNotFound      = errors.New("segment with this slug doesn't exist")
+	ErrSegmentAlreadyExists  = errors.New("segment with this slug already exists")
+	ErrSegmentAlreadyDeleted = errors.New("segment with this slug is already deleted")
+	ErrSegmentNotFound       = errors.New("segment with this slug doesn't exist")
 )
 
 type Repository interface {
-	// CreateSegment creates a segment with specified slug.
-	// If there is a segment with this slug already, returns `ErrAlreadyExists`
 	CreateSegment(slug string) error
-
-	// CreateSegmentAndEnroll creates a segment with specified slug and adds it to users with specified IDs
-	CreateSegmentAndEnroll(slug string, userIDs []int) error
-
-	// DeleteSegment marks segment as deleted and marks all records with it as deleted
-	// Returns `ErrNotFound` if there is no segment by this slug
+	AddSegmentToUsers(slug string, userIDs []int) error
 	DeleteSegment(slug string) error
+	GetAllActiveSegments() ([]entity.Segment, error)
+	GetAllSegments() ([]entity.Segment, error)
 
-	// UpdateUserSegments adds and removes segments to/from user with expiration date
 	// !!NOTE!!: behaviour in case of duplicate entries in slices or an entry
 	// being in both slices is intentionally undefined
 	UpdateUserSegments(userID int, addSegments []entity.SegmentExpiration, removeSegments []entity.SegmentExpiration) error
 
-	// GetUserActiveSegments returns active (not deleted and not expired) segments that user is in
-	GetUserActiveSegments(userID int) ([]entity.Segment, error)
+	GetActiveUserSegments(userID int) ([]entity.UserSegment, error)
 
 	// DumpHistory returns all operations related to given users that occurred in specified time span
 	DumpHistory(userIDs []int, timeFrom time.Time, timeTo time.Time) ([]entity.Operation, error)

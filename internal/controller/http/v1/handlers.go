@@ -10,7 +10,7 @@ import (
 )
 
 type Routes struct {
-	s *service.Service
+	s service.Service
 }
 
 // Uses manual JSON formatting since this function can be called if marshalling
@@ -34,10 +34,6 @@ func respondWithJson(w http.ResponseWriter, statusCode int, j JsonResponse) {
 	w.Write(b)
 }
 
-func (routes *Routes) HealthHandler(w http.ResponseWriter, r *http.Request) {
-	respondWithJson(w, http.StatusOK, &JsonStatus{"OK"})
-}
-
 func (routes *Routes) MethodNotAllowedHandler(w http.ResponseWriter, r *http.Request) {
 	j := &JsonError{http.StatusMethodNotAllowed, http.StatusText(http.StatusMethodNotAllowed)}
 	respondWithJson(w, http.StatusMethodNotAllowed, j)
@@ -46,6 +42,33 @@ func (routes *Routes) MethodNotAllowedHandler(w http.ResponseWriter, r *http.Req
 func (routes *Routes) NotFoundHandler(w http.ResponseWriter, r *http.Request) {
 	j := &JsonError{http.StatusNotFound, http.StatusText(http.StatusNotFound)}
 	respondWithJson(w, http.StatusMethodNotAllowed, j)
+}
+
+// GET /health
+func (routes *Routes) HealthHandler(w http.ResponseWriter, r *http.Request) {
+	respondWithJson(w, http.StatusOK, &JsonStatus{"OK"})
+}
+
+// GET /segments/active
+func (routes *Routes) SegmentsActiveHandler(w http.ResponseWriter, r *http.Request) {
+	segments, err := routes.s.GetAllActiveSegments()
+	if err != nil {
+		log.Error().Err(err).Msg("")
+		internalServerError(w)
+	}
+
+	respondWithJson(w, http.StatusOK, &JsonSegments{segments})
+}
+
+// GET /segments/active
+func (routes *Routes) SegmentsHandler(w http.ResponseWriter, r *http.Request) {
+	segments, err := routes.s.GetAllSegments()
+	if err != nil {
+		log.Error().Err(err).Msg("")
+		internalServerError(w)
+	}
+
+	respondWithJson(w, http.StatusOK, &JsonSegments{segments})
 }
 
 // POST /segment/create
@@ -86,6 +109,8 @@ func (routes *Routes) SegmentDeleteHandler(w http.ResponseWriter, r *http.Reques
 
 		if errors.Is(err, service.ErrSegmentNotFound) {
 			respondWithJson(w, http.StatusBadRequest, &JsonError{http.StatusBadRequest, "Segment wasn't found"})
+		} else if errors.Is(err, service.ErrSegmentAlreadyDeleted) {
+			respondWithJson(w, http.StatusBadRequest, &JsonError{http.StatusBadRequest, "Segment is already deleted"})
 		} else {
 			internalServerError(w)
 		}
@@ -137,7 +162,7 @@ func (routes *Routes) UserSegmentsHandler(w http.ResponseWriter, r *http.Request
 	}
 	defer r.Body.Close()
 
-	segments, err := routes.s.GetUserActiveSegments(j.UserID)
+	segments, err := routes.s.GetActiveUserSegments(j.UserID)
 	if err != nil {
 		log.Error().Err(err).Msg("")
 		internalServerError(w)

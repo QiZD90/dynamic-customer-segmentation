@@ -8,7 +8,7 @@ import (
 	"github.com/go-chi/chi/middleware"
 )
 
-func NewMux(s *service.Service) http.Handler {
+func NewMux(s service.Service) http.Handler {
 	mux := chi.NewMux()
 
 	routes := &Routes{s: s}
@@ -26,6 +26,8 @@ func NewMux(s *service.Service) http.Handler {
 func apiMux(routes *Routes) http.Handler {
 	mux := chi.NewMux()
 
+	mux.Get("/segments", routes.SegmentsHandler)
+	mux.Get("/segments/active", routes.SegmentsActiveHandler)
 	mux.Post("/segment/create", routes.SegmentCreateHandler)
 	mux.Post("/segment/delete", routes.SegmentDeleteHandler)
 	mux.Post("/user/update", routes.UserUpdateHandler)
