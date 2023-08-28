@@ -31,7 +31,7 @@ func apiMux(routes *Routes) http.Handler {
 	mux.Get("/segments", routes.SegmentsHandler)
 	mux.Get("/segments/active", routes.SegmentsActiveHandler)
 	mux.Post("/segment/create", routes.SegmentCreateHandler)
-	mux.Post("/segment/create_and_enroll", routes.SegmentCreateAndEnrollHandler)
+	mux.Post("/segment/create/enroll", routes.SegmentCreateEnrollHandler)
 	mux.Post("/segment/delete", routes.SegmentDeleteHandler)
 	mux.Post("/user/update", routes.UserUpdateHandler)
 	mux.Get("/user/segments", routes.UserSegmentsHandler)

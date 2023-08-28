@@ -109,8 +109,8 @@ func (routes *Routes) SegmentCreateHandler(w http.ResponseWriter, r *http.Reques
 	respondWithJson(w, http.StatusOK, &JsonStatus{"OK"})
 }
 
-// POST /segment/create_and_enroll
-func (routes *Routes) SegmentCreateAndEnrollHandler(w http.ResponseWriter, r *http.Request) {
+// POST /segment/create/enroll
+func (routes *Routes) SegmentCreateEnrollHandler(w http.ResponseWriter, r *http.Request) {
 	var j JsonSegmentCreateAndEnroll
 	if err := json.NewDecoder(r.Body).Decode(&j); err != nil {
 		log.Error().Err(err).Msg("")

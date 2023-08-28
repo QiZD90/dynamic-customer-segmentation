@@ -60,7 +60,7 @@ curl --request POST --url 'http://localhost:80/api/v1/segment/delete' \
 ### Создание сегмента и добавление его проценту пользователей
 
 ```bash
-curl --location 'http://localhost:80/api/v1/segment/create_and_enroll' \
+curl --location 'http://localhost:80/api/v1/segment/create/enroll' \
 --header 'Content-Type: application/json' \
 --data '{"slug": "AVITO_RANDOM_SEGMENT", "percent": 5}'
 ```
