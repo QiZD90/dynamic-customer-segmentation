@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/QiZD90/dynamic-customer-segmentation/config"
+	_ "github.com/QiZD90/dynamic-customer-segmentation/docs"
 	v1 "github.com/QiZD90/dynamic-customer-segmentation/internal/controller/http/v1"
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/filestorage"
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/filestorage/ondisk"
@@ -18,6 +19,15 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// @title Dynamic Customer Segmentation
+// @version 1.0
+// @description Microservice for managing analytics segments
+
+// @contact.name Elisey Puzko
+// @contact.email puzko.e02@gmail.com
+
+// @host localhost:80
+// @BasePath /
 func main() {
 	// Parse config
 	cfg, err := config.Parse()

@@ -6,6 +6,7 @@ import (
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/service"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 )
 
 func NewMux(s service.Service) http.Handler {
@@ -19,6 +20,8 @@ func NewMux(s service.Service) http.Handler {
 	mux.Handle("/csv/*", routes.CSVOnDiskHandlerWrapper(fs))
 	mux.MethodNotAllowed(routes.MethodNotAllowedHandler)
 	mux.NotFound(routes.NotFoundHandler)
+
+	mux.Get("/swagger/*", httpSwagger.Handler())
 
 	mux.Mount("/api/v1", apiMux(routes))
 

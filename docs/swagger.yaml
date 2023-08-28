@@ -1,0 +1,349 @@
+basePath: /
+definitions:
+  github_com_QiZD90_dynamic-customer-segmentation_internal_entity.Segment:
+    properties:
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      slug:
+        type: string
+    type: object
+  github_com_QiZD90_dynamic-customer-segmentation_internal_entity.SegmentExpiration:
+    properties:
+      expires_at:
+        type: string
+      slug:
+        type: string
+    type: object
+  github_com_QiZD90_dynamic-customer-segmentation_internal_entity.UserSegment:
+    properties:
+      added_at:
+        type: string
+      deleted_at:
+        type: string
+      expires_at:
+        type: string
+      slug:
+        type: string
+    type: object
+  internal_controller_http_v1.JsonCreateSegmentRequest:
+    properties:
+      slug:
+        type: string
+    type: object
+  internal_controller_http_v1.JsonDate:
+    properties:
+      month:
+        type: integer
+      year:
+        type: integer
+    type: object
+  internal_controller_http_v1.JsonDeleteSegmentRequest:
+    properties:
+      slug:
+        type: string
+    type: object
+  internal_controller_http_v1.JsonError:
+    properties:
+      error_message:
+        type: string
+      status_code:
+        type: integer
+    type: object
+  internal_controller_http_v1.JsonLink:
+    properties:
+      link:
+        type: string
+    type: object
+  internal_controller_http_v1.JsonSegmentCreateAndEnroll:
+    properties:
+      percent:
+        type: integer
+      slug:
+        type: string
+    type: object
+  internal_controller_http_v1.JsonSegments:
+    properties:
+      segments:
+        items:
+          $ref: '#/definitions/github_com_QiZD90_dynamic-customer-segmentation_internal_entity.Segment'
+        type: array
+    type: object
+  internal_controller_http_v1.JsonStatus:
+    properties:
+      status:
+        type: string
+    type: object
+  internal_controller_http_v1.JsonUserCSVRequest:
+    properties:
+      from:
+        $ref: '#/definitions/internal_controller_http_v1.JsonDate'
+      to:
+        $ref: '#/definitions/internal_controller_http_v1.JsonDate'
+      user_id:
+        type: integer
+    type: object
+  internal_controller_http_v1.JsonUserIDs:
+    properties:
+      user_ids:
+        items:
+          type: integer
+        type: array
+    type: object
+  internal_controller_http_v1.JsonUserSegments:
+    properties:
+      segments:
+        items:
+          $ref: '#/definitions/github_com_QiZD90_dynamic-customer-segmentation_internal_entity.UserSegment'
+        type: array
+    type: object
+  internal_controller_http_v1.JsonUserSegmentsHandlerRequest:
+    properties:
+      user_id:
+        type: integer
+    type: object
+  internal_controller_http_v1.JsonUserUpdateRequest:
+    properties:
+      add_segments:
+        items:
+          $ref: '#/definitions/github_com_QiZD90_dynamic-customer-segmentation_internal_entity.SegmentExpiration'
+        type: array
+      remove_segments:
+        items:
+          $ref: '#/definitions/github_com_QiZD90_dynamic-customer-segmentation_internal_entity.SegmentExpiration'
+        type: array
+      user_id:
+        type: integer
+    type: object
+host: localhost:80
+info:
+  contact:
+    email: puzko.e02@gmail.com
+    name: Elisey Puzko
+  description: Microservice for managing analytics segments
+  title: Dynamic Customer Segmentation
+  version: "1.0"
+paths:
+  /api/v1/segment/create:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Create new segment with given slug. If there is already active segment with this slug,
+        or if there was a segment with this slug but it has been deleted, responds with an error and 400 status code
+      parameters:
+      - description: input
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/internal_controller_http_v1.JsonCreateSegmentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_controller_http_v1.JsonStatus'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_controller_http_v1.JsonError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_controller_http_v1.JsonError'
+      summary: Create new segment
+  /api/v1/segment/create/enroll:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Creates new segment with given slug. If there is already active segment with this slug,
+        or if there was a segment with this slug but it has been deleted, responds with an error and 400 status code
+        Get a percent of randomly selected users from user DB service and tries to add the newly created segment to them.
+      parameters:
+      - description: input
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/internal_controller_http_v1.JsonSegmentCreateAndEnroll'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: IDs of users that were selected
+          schema:
+            $ref: '#/definitions/internal_controller_http_v1.JsonUserIDs'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_controller_http_v1.JsonError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_controller_http_v1.JsonError'
+      summary: Creates new segment and adds it to randomly selected users
+  /api/v1/segment/delete:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Marks a segment by this slug as deleted. If there is no segment like this, or if was already deleted,
+        responds with an error and 400 status code
+      parameters:
+      - description: input
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/internal_controller_http_v1.JsonDeleteSegmentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_controller_http_v1.JsonStatus'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_controller_http_v1.JsonError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_controller_http_v1.JsonError'
+      summary: Delete a segment
+  /api/v1/segments:
+    get:
+      description: Get all segments (even deleted)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_controller_http_v1.JsonSegments'
+      summary: Get all segments
+  /api/v1/segments/active:
+    get:
+      description: Get all active (not deleted) segments
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_controller_http_v1.JsonSegments'
+      summary: Get all active segments
+  /api/v1/user/csv:
+    get:
+      consumes:
+      - application/json
+      description: |-
+        Generate CSV report file on user's segment history and uploads it to service's configured file storage service.
+        Note thah `month` param in date is an integer that ranges from 1 (january) to 12 (december)
+        Also note that the specified range includes the "from" date but excludes the "to" date
+      parameters:
+      - description: input
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/internal_controller_http_v1.JsonUserCSVRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_controller_http_v1.JsonLink'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_controller_http_v1.JsonError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_controller_http_v1.JsonError'
+      summary: Generate CSV report on user's segment history
+  /api/v1/user/segments:
+    get:
+      consumes:
+      - application/json
+      parameters:
+      - description: input
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/internal_controller_http_v1.JsonUserSegmentsHandlerRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_controller_http_v1.JsonUserSegments'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_controller_http_v1.JsonError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_controller_http_v1.JsonError'
+      summary: Get user's active segments
+  /api/v1/user/update:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Tries to add and remove segments from user. If any of the specified segments are not active
+        or if any of the lists contains same segment twice or if both list contain the same segment
+        responds with an error and 400 status code.
+        You can specify expiry date for segments. This field is ignored in segments in remove list.
+        If you try add a segment to a user that already has it or you try to remove it from a user
+        that doesn't have it then that segment is skipped. Note, that if you try to modify expiry
+        date of an active segment, the correct way to do it is to remove it and then add a new one.
+      parameters:
+      - description: input
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/internal_controller_http_v1.JsonUserUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_controller_http_v1.JsonStatus'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/internal_controller_http_v1.JsonError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/internal_controller_http_v1.JsonError'
+      summary: Add and remove segments from user
+  /csv/{fname}:
+    get:
+      description: Get static CSV file stored on disk
+      responses: {}
+      summary: Get CSV file
+  /health:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_controller_http_v1.JsonStatus'
+      summary: Health check
+swagger: "2.0"
