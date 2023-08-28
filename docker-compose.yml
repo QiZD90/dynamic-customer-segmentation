@@ -11,6 +11,19 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      mock-user-db-microservice:
+        condition: service_healthy
+  
+  mock-user-db-microservice:
+    container_name: mock-user-db-microservice
+    build: ./_mock-user-db-microservice/
+    ports:
+      - "4224:80"
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:80/health || exit 1
+      interval: 5s
+      retries: 5
+      timeout: 10s
 
   postgres:
     container_name: postgres

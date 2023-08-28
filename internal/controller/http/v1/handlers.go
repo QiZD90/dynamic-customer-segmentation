@@ -109,6 +109,34 @@ func (routes *Routes) SegmentCreateHandler(w http.ResponseWriter, r *http.Reques
 	respondWithJson(w, http.StatusOK, &JsonStatus{"OK"})
 }
 
+// POST /segment/create_and_enroll
+func (routes *Routes) SegmentCreateAndEnrollHandler(w http.ResponseWriter, r *http.Request) {
+	var j JsonSegmentCreateAndEnroll
+	if err := json.NewDecoder(r.Body).Decode(&j); err != nil {
+		log.Error().Err(err).Msg("")
+		respondWithJson(w, http.StatusBadRequest, &JsonError{http.StatusBadRequest, "Error while unmarshalling request JSON"})
+
+		return
+	}
+
+	userIDs, err := routes.s.CreateSegmentAndEnrollPercent(j.Slug, j.Percent)
+	if err != nil {
+		log.Error().Err(err).Msg("")
+
+		if errors.Is(err, service.ErrSegmentAlreadyExists) {
+			respondWithJson(w, http.StatusBadRequest, &JsonError{http.StatusBadRequest, "Segment already exists"})
+		} else if errors.Is(err, service.ErrSegmentNotFound) {
+			respondWithJson(w, http.StatusBadRequest, &JsonError{http.StatusBadRequest, "Segment wasn't found"})
+		} else {
+			internalServerError(w)
+		}
+
+		return
+	}
+
+	respondWithJson(w, http.StatusOK, &JsonUserIDs{UserIDs: userIDs})
+}
+
 // POST /segment/delete
 func (routes *Routes) SegmentDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	var j JsonDeleteSegmentRequest

@@ -5,10 +5,11 @@ import (
 )
 
 type Config struct {
-	Service  ServiceConfig
-	Server   ServerConfig
-	Postgres PostgresConfig
-	OnDisk   OnDiskConfig
+	Service     ServiceConfig
+	Server      ServerConfig
+	Postgres    PostgresConfig
+	OnDisk      OnDiskConfig
+	UserService UserServiceConfig
 	//AWS      AWSConfig
 }
 
@@ -29,6 +30,10 @@ type OnDiskConfig struct {
 	DirectoryPath string `evn:"ONDISK_DIRECTORY_PATH" envDefault:"csv/"`
 }
 
+type UserServiceConfig struct {
+	BaseURL string `env:"USER_SERVICE_BASE_URL,required"`
+}
+
 func Parse() (*Config, error) {
 	cfg := Config{}
 
@@ -45,6 +50,10 @@ func Parse() (*Config, error) {
 	}
 
 	if err := env.Parse(&cfg.OnDisk); err != nil {
+		return nil, err
+	}
+
+	if err := env.Parse(&cfg.UserService); err != nil {
 		return nil, err
 	}
 

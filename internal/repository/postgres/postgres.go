@@ -49,7 +49,7 @@ func (p *PostgresRepository) CreateSegment(slug string) error {
 }
 
 func (p *PostgresRepository) AddSegmentToUsers(slug string, userIDs []int) error { // TODO:
-	/*tx, err := p.db.Begin()
+	tx, err := p.db.Begin()
 	if err != nil {
 		return fmt.Errorf("AddSegmentToUsers() - p.db.Begin(): %w", err)
 	}
@@ -70,7 +70,43 @@ func (p *PostgresRepository) AddSegmentToUsers(slug string, userIDs []int) error
 		return repository.ErrSegmentAlreadyDeleted
 	}
 
-	*/
+	for _, userID := range userIDs {
+		// check if user already has an active segment
+		var cnt int
+		row = tx.QueryRow(
+			`SELECT COUNT(*)
+			FROM users_segments
+			WHERE user_id=$1
+			AND segment_id=(SELECT id FROM segments WHERE slug=$2)
+			AND removed_at IS NULL
+			AND (expires_at IS NULL OR expires_at > NOW())`,
+			userID, slug,
+		)
+		if err := row.Scan(&cnt); err != nil {
+			return fmt.Errorf("AddSegmentToUsers() - tx.QueryRow(): %w", err)
+		}
+
+		if cnt != 0 { // segment already exists and is active
+			continue
+		}
+
+		// add segment
+		_, err := tx.Exec(
+			`INSERT INTO users_segments(segment_id, user_id)
+			VALUES ((SELECT id FROM segments WHERE slug=$1), $2)`,
+			slug, userID,
+		)
+
+		if err != nil {
+			return fmt.Errorf("AddSegmentToUsers() - tx.Exec(): %w", err)
+		}
+	}
+
+	// commit changes
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("AddSegmentToUsers() - tx.Commit(): %w", err)
+	}
+
 	return nil
 }
 

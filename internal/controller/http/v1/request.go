@@ -6,6 +6,11 @@ type JsonCreateSegmentRequest struct {
 	Slug string
 }
 
+type JsonSegmentCreateAndEnroll struct {
+	Slug    string
+	Percent int
+}
+
 type JsonDeleteSegmentRequest struct {
 	Slug string
 }

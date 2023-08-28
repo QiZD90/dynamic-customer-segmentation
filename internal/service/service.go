@@ -9,6 +9,7 @@ import (
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/entity"
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/filestorage"
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/repository"
+	"github.com/QiZD90/dynamic-customer-segmentation/internal/userservice"
 )
 
 var (
@@ -23,7 +24,11 @@ type Service interface {
 	// If there is a segment (active or deleted) with this slug already, returns `ErrSegmentAlreadyExists`
 	CreateSegment(slug string) error
 
-	CreateSegmentAndEnrollPercent(slug string, percent int) error
+	// CreateSegmentAndEnrollPercent creates segment using CreateSegment, gets random users
+	// through UserService and then tries to add the segment to them.
+	// Returns ids of selected users (they may or may not have got the segment added)
+	// May return `ErrSegmentNotFound` or `ErrSegmentAlreadyExists`
+	CreateSegmentAndEnrollPercent(slug string, percent int) ([]int, error)
 
 	// DeleteSegment marks segment as deleted and marks all records with it as removed
 	// Returns `ErrSegmentNotFound` if there is no segment by this slug
@@ -52,6 +57,7 @@ type Service interface {
 type SegmentationService struct {
 	Repository  repository.Repository
 	FileStorage filestorage.FileStorage
+	UserService userservice.UserService
 }
 
 func (s *SegmentationService) CreateSegment(slug string) error {
@@ -74,8 +80,31 @@ func (s *SegmentationService) DeleteSegment(slug string) error {
 	return err
 }
 
-func (s *SegmentationService) CreateSegmentAndEnrollPercent(slug string, percent int) error { // TODO:
-	return nil
+func (s *SegmentationService) CreateSegmentAndEnrollPercent(slug string, percent int) ([]int, error) {
+	if err := s.CreateSegment(slug); err != nil {
+		if errors.Is(err, repository.ErrSegmentAlreadyExists) {
+			return nil, ErrSegmentAlreadyExists
+		}
+
+		return nil, err
+	}
+
+	userIDs, err := s.UserService.GetRandomUsers(percent)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.Repository.AddSegmentToUsers(slug, userIDs); err != nil {
+		if errors.Is(err, repository.ErrSegmentAlreadyExists) {
+			return nil, ErrSegmentAlreadyExists
+		} else if errors.Is(err, repository.ErrSegmentNotFound) {
+			return nil, ErrSegmentNotFound
+		}
+
+		return nil, err
+	}
+
+	return userIDs, nil
 }
 
 func (s *SegmentationService) GetAllActiveSegments() ([]entity.Segment, error) {
@@ -126,6 +155,6 @@ func (s *SegmentationService) generateCSVString(userID int, operations []entity.
 	return sb.String()
 }
 
-func New(repo repository.Repository, fstorage filestorage.FileStorage) *SegmentationService {
-	return &SegmentationService{Repository: repo, FileStorage: fstorage}
+func New(repo repository.Repository, fstorage filestorage.FileStorage, userService userservice.UserService) *SegmentationService {
+	return &SegmentationService{Repository: repo, FileStorage: fstorage, UserService: userService}
 }

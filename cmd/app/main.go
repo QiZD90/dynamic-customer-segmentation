@@ -11,6 +11,7 @@ import (
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/filestorage/ondisk"
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/repository/postgres"
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/service"
+	"github.com/QiZD90/dynamic-customer-segmentation/internal/userservice/usermicroservice"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
@@ -36,6 +37,12 @@ func main() {
 		log.Fatal().Err(err).Msg("error while creating ondisk filestorage")
 	}
 
+	// Connect to usermicroservice
+	userService, err := usermicroservice.New(cfg.UserService.BaseURL)
+	if err != nil {
+		log.Fatal().Err(err).Msg("error while connecting to usermicroservice")
+	}
+
 	// Migrate up to date
 	log.Info().Msg("Starting migrations...")
 	m, err := migrate.New("file://migrations", cfg.Postgres.Addr)
@@ -56,7 +63,7 @@ func main() {
 	}
 
 	// Instantiate service
-	s := service.New(repo, fstorage)
+	s := service.New(repo, fstorage, userService)
 
 	// Get mux
 	mux := v1.NewMux(s)
@@ -64,5 +71,7 @@ func main() {
 	// Start the server
 	addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
 	log.Info().Msgf("Listening at %s", addr)
-	http.ListenAndServe(addr, mux)
+	if err := http.ListenAndServe(addr, mux); err != nil {
+		log.Fatal().Err(err).Msg("")
+	}
 }

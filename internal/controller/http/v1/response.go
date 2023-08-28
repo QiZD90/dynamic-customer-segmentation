@@ -58,3 +58,11 @@ type JsonUserSegments struct {
 func (j *JsonUserSegments) Bytes() ([]byte, error) {
 	return json.Marshal(j)
 }
+
+type JsonUserIDs struct {
+	UserIDs []int `json:"user_ids"`
+}
+
+func (j *JsonUserIDs) Bytes() ([]byte, error) {
+	return json.Marshal(j)
+}

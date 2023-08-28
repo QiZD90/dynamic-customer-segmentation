@@ -17,7 +17,12 @@ var (
 
 type Repository interface {
 	CreateSegment(slug string) error
+
+	// AddSegmentToUsers adds users to specified segment.
+	// If segment doesn't exist, returns `ErrSegmentNotFound` or `ErrSegmentAlreadyDeleted`
+	// If any of the users already have the segment, ignore them
 	AddSegmentToUsers(slug string, userIDs []int) error
+
 	DeleteSegment(slug string) error
 	GetAllActiveSegments() ([]entity.Segment, error)
 	GetAllSegments() ([]entity.Segment, error)
