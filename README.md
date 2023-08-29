@@ -8,6 +8,8 @@
 - chi (в качестве HTTP router)
 - PostgreSQL (в качестве БД)
 - golang-migrate/migrate (для миграций БД)
+- go-sqlmock (для моков БД)
+- testify/assert (для тестирования)
 - zerolog (для логгирования)
 - Docker (для запуска сервиса)
 
