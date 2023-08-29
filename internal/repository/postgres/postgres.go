@@ -48,7 +48,7 @@ func (p *PostgresRepository) CreateSegment(slug string) error {
 	return nil
 }
 
-func (p *PostgresRepository) AddSegmentToUsers(slug string, userIDs []int) error { // TODO:
+func (p *PostgresRepository) AddSegmentToUsers(slug string, userIDs []int) error {
 	tx, err := p.db.Begin()
 	if err != nil {
 		return fmt.Errorf("AddSegmentToUsers() - p.db.Begin(): %w", err)
@@ -125,7 +125,7 @@ func (p *PostgresRepository) DeleteSegment(slug string) error {
 			return repository.ErrSegmentNotFound
 		}
 
-		return fmt.Errorf("CreateSegment() - tx.QueryRow(): %w", err)
+		return fmt.Errorf("DeleteSegment() - tx.QueryRow(): %w", err)
 	}
 
 	if deletedAt.Valid { // already deleted
