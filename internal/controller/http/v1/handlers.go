@@ -157,6 +157,12 @@ func (routes *Routes) SegmentCreateEnrollHandler(w http.ResponseWriter, r *http.
 		return
 	}
 
+	if j.Percent < 0 || j.Percent > 100 {
+		respondWithJson(w, http.StatusBadRequest, &JsonError{http.StatusBadRequest, "Invalid percent value"})
+
+		return
+	}
+
 	userIDs, err := routes.s.CreateSegmentAndEnrollPercent(j.Slug, j.Percent)
 	if err != nil {
 		log.Error().Err(err).Msg("")
