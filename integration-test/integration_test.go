@@ -9,10 +9,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
+	"sort"
 	"testing"
 	"time"
 
 	v1 "github.com/QiZD90/dynamic-customer-segmentation/internal/controller/http/v1"
+	"github.com/QiZD90/dynamic-customer-segmentation/internal/entity"
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/filestorage"
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/filestorage/ondisk"
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/repository/postgres"
@@ -28,7 +31,7 @@ import (
 
 const pgURL = "postgresql://testuser:testuserpassword@test-postgres:5432/testdb?sslmode=disable"
 
-var timeBase = time.Date(2023, time.November, 15, 15, 0, 0, 0, time.UTC)
+var timeBase = time.Date(2000, time.November, 15, 15, 0, 0, 0, time.UTC)
 var timeProvider = fixedtimeprovider.New(timeBase)
 
 var db *sql.DB
@@ -199,6 +202,218 @@ func TestCreateSegment(t *testing.T) {
 
 		assert.Equal(t, http.StatusBadRequest, r.StatusCode)
 		assert.Equal(t, expected, got)
+	}
+
+	purgeDB(db)
+}
+
+func TestDeleteSegment(t *testing.T) {
+	url := server.URL + "/api/v1/segment/delete"
+
+	// Create segment to be deleted
+	assert.NoError(t, s.CreateSegment("AVITO_TEST_SEGMENT"))
+
+	// First request; should be successfull
+	{
+		var body bytes.Buffer
+		body.WriteString(`{"slug": "AVITO_TEST_SEGMENT"}`)
+
+		r, err := http.Post(url, "application/json", &body)
+		assert.NoError(t, err, "TestDeleteSegment() - http.Post()")
+		defer r.Body.Close()
+
+		expected := v1.JsonStatus{Status: "OK"}
+		var got v1.JsonStatus
+
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("TestDeleteSegment() - failed to unmarshall json")
+		}
+
+		assert.Equal(t, http.StatusOK, r.StatusCode)
+		assert.Equal(t, expected, got)
+	}
+
+	// Second request; should fail with 400 and JsonError
+	{
+		var body bytes.Buffer
+		body.WriteString(`{"slug": "AVITO_TEST_SEGMENT"}`)
+
+		r, err := http.Post(url, "application/json", &body)
+		assert.NoError(t, err, "TestDeleteSegment() - http.Post()")
+		defer r.Body.Close()
+
+		expected := v1.JsonError{StatusCode: http.StatusBadRequest, Message: "Segment is already deleted"}
+		var got v1.JsonError
+
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("TestDeleteSegment() - failed to unmarshall json")
+		}
+
+		assert.Equal(t, http.StatusBadRequest, r.StatusCode)
+		assert.Equal(t, expected, got)
+	}
+
+	// Third request; should fail with 400 and JsonError
+	{
+		var body bytes.Buffer
+		body.WriteString(`INVALID JSON`)
+
+		r, err := http.Post(url, "application/json", &body)
+		assert.NoError(t, err, "TestDeleteSegment() - http.Post()")
+		defer r.Body.Close()
+
+		expected := v1.JsonError{StatusCode: http.StatusBadRequest, Message: "Error while unmarshalling request JSON"}
+		var got v1.JsonError
+
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("TestDeleteSegment() - failed to unmarshall json")
+		}
+
+		assert.Equal(t, http.StatusBadRequest, r.StatusCode)
+		assert.Equal(t, expected, got)
+	}
+
+	// Fourth request; should fail with 400 and JsonError
+	{
+		var body bytes.Buffer
+		body.WriteString(`{"slug": "AVITO_SEGMENT_THAT_WAS_NOT_CREATED"}`)
+
+		r, err := http.Post(url, "application/json", &body)
+		assert.NoError(t, err, "TestDeleteSegment() - http.Post()")
+		defer r.Body.Close()
+
+		expected := v1.JsonError{StatusCode: http.StatusBadRequest, Message: "Segment wasn't found"}
+		var got v1.JsonError
+
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("TestDeleteSegment() - failed to unmarshall json")
+		}
+
+		assert.Equal(t, http.StatusBadRequest, r.StatusCode)
+		assert.Equal(t, expected, got)
+	}
+
+	purgeDB(db)
+}
+
+func TestGetSegmentsAndGetActiveSegments(t *testing.T) {
+	hourAfterTimeBase := timeBase.Add(time.Hour)
+	twoHoursAfterTimeBase := timeBase.Add(2 * time.Hour)
+	defer timeProvider.SetTime(timeBase)
+
+	// Create and delete segments
+	assert.NoError(t, s.CreateSegment("AVITO_TEST_SEGMENT"))
+	assert.NoError(t, s.CreateSegment("AVITO_DELETED_SEGMENT"))
+	timeProvider.SetTime(hourAfterTimeBase)
+	assert.NoError(t, s.CreateSegment("AVITO_VOICE_MESSAGES"))
+	assert.NoError(t, s.DeleteSegment("AVITO_DELETED_SEGMENT"))
+
+	// First request
+	{
+		r, err := http.Get(server.URL + "/api/v1/segments")
+		assert.NoError(t, err, "TestGetSegmentsAndGetActiveSegments() - http.Post()")
+		defer r.Body.Close()
+
+		expected := v1.JsonSegments{
+			Segments: []entity.Segment{
+				{Slug: "AVITO_TEST_SEGMENT", CreatedAt: timeBase, DeletedAt: nil},
+				{Slug: "AVITO_VOICE_MESSAGES", CreatedAt: hourAfterTimeBase, DeletedAt: nil},
+				{Slug: "AVITO_DELETED_SEGMENT", CreatedAt: timeBase, DeletedAt: &hourAfterTimeBase},
+			},
+		}
+		var got v1.JsonSegments
+
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("TestGetSegmentsAndGetActiveSegments() - failed to unmarshall json")
+		}
+
+		// sort expected and got by slugs
+		sort.Slice(expected.Segments, func(i, j int) bool { return expected.Segments[i].Slug < expected.Segments[j].Slug })
+		sort.Slice(got.Segments, func(i, j int) bool { return got.Segments[i].Slug < got.Segments[j].Slug })
+
+		assert.Equal(t, http.StatusOK, r.StatusCode)
+		assert.True(t, reflect.DeepEqual(expected, got), "expected: %s, got: %s", expected, got)
+	}
+
+	// First request for active segments
+	{
+		r, err := http.Get(server.URL + "/api/v1/segments/active")
+		assert.NoError(t, err, "TestGetSegmentsAndGetActiveSegments() - http.Post()")
+		defer r.Body.Close()
+
+		expected := v1.JsonSegments{
+			Segments: []entity.Segment{
+				{Slug: "AVITO_TEST_SEGMENT", CreatedAt: timeBase, DeletedAt: nil},
+				{Slug: "AVITO_VOICE_MESSAGES", CreatedAt: hourAfterTimeBase, DeletedAt: nil},
+			},
+		}
+		var got v1.JsonSegments
+
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("TestGetSegmentsAndGetActiveSegments() - failed to unmarshall json")
+		}
+
+		// sort expected and got by slugs
+		sort.Slice(expected.Segments, func(i, j int) bool { return expected.Segments[i].Slug < expected.Segments[j].Slug })
+		sort.Slice(got.Segments, func(i, j int) bool { return got.Segments[i].Slug < got.Segments[j].Slug })
+
+		assert.Equal(t, http.StatusOK, r.StatusCode)
+		assert.True(t, reflect.DeepEqual(expected, got), "expected: %s, got: %s", expected, got)
+	}
+
+	// Delete all segments
+	timeProvider.SetTime(twoHoursAfterTimeBase)
+	s.DeleteSegment("AVITO_TEST_SEGMENT")
+	s.DeleteSegment("AVITO_VOICE_MESSAGES")
+
+	// Second request
+	{
+		r, err := http.Get(server.URL + "/api/v1/segments")
+		assert.NoError(t, err, "TestGetSegmentsAndGetActiveSegments() - http.Post()")
+		defer r.Body.Close()
+
+		expected := v1.JsonSegments{
+			Segments: []entity.Segment{
+				{Slug: "AVITO_TEST_SEGMENT", CreatedAt: timeBase, DeletedAt: &twoHoursAfterTimeBase},
+				{Slug: "AVITO_VOICE_MESSAGES", CreatedAt: hourAfterTimeBase, DeletedAt: &twoHoursAfterTimeBase},
+				{Slug: "AVITO_DELETED_SEGMENT", CreatedAt: timeBase, DeletedAt: &hourAfterTimeBase},
+			},
+		}
+		var got v1.JsonSegments
+
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("TestGetSegmentsAndGetActiveSegments() - failed to unmarshall json")
+		}
+
+		// sort expected and got by slugs
+		sort.Slice(expected.Segments, func(i, j int) bool { return expected.Segments[i].Slug < expected.Segments[j].Slug })
+		sort.Slice(got.Segments, func(i, j int) bool { return got.Segments[i].Slug < got.Segments[j].Slug })
+
+		assert.Equal(t, http.StatusOK, r.StatusCode)
+		assert.True(t, reflect.DeepEqual(expected, got), "expected: %s, got: %s", expected, got)
+	}
+
+	// First request for active segments
+	{
+		r, err := http.Get(server.URL + "/api/v1/segments/active")
+		assert.NoError(t, err, "TestGetSegmentsAndGetActiveSegments() - http.Post()")
+		defer r.Body.Close()
+
+		expected := v1.JsonSegments{
+			Segments: []entity.Segment{},
+		}
+		var got v1.JsonSegments
+
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("TestGetSegmentsAndGetActiveSegments() - failed to unmarshall json")
+		}
+
+		// sort expected and got by slugs
+		sort.Slice(expected.Segments, func(i, j int) bool { return expected.Segments[i].Slug < expected.Segments[j].Slug })
+		sort.Slice(got.Segments, func(i, j int) bool { return got.Segments[i].Slug < got.Segments[j].Slug })
+
+		assert.Equal(t, http.StatusOK, r.StatusCode)
+		assert.True(t, reflect.DeepEqual(expected, got), "expected: %s, got: %s", expected, got)
 	}
 
 	purgeDB(db)

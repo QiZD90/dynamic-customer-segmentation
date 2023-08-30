@@ -37,7 +37,7 @@ func (p *PostgresRepository) CreateSegment(slug string) error {
 	}
 
 	// create the segment
-	_, err = tx.Exec("INSERT INTO segments(slug) VALUES ($1)", slug)
+	_, err = tx.Exec("INSERT INTO segments(slug, created_at) VALUES ($1, $2)", slug, p.timeProvider.Now())
 	if err != nil {
 		return fmt.Errorf("CreateSegment() - tx.Exec(): %w", err)
 	}
@@ -94,9 +94,9 @@ func (p *PostgresRepository) AddSegmentToUsers(slug string, userIDs []int) error
 
 		// add segment
 		_, err := tx.Exec(
-			`INSERT INTO users_segments(segment_id, user_id)
-			VALUES ((SELECT id FROM segments WHERE slug=$1), $2)`,
-			slug, userID,
+			`INSERT INTO users_segments(segment_id, user_id, added_at)
+			VALUES ((SELECT id FROM segments WHERE slug=$1), $2, $3)`,
+			slug, userID, p.timeProvider.Now(),
 		)
 
 		if err != nil {
@@ -208,9 +208,9 @@ func (p *PostgresRepository) UpdateUserSegments(userID int, addSegments []entity
 			expiresAt.Valid = true
 		}
 		_, err := tx.Exec(
-			`INSERT INTO users_segments(segment_id, user_id, expires_at)
-			VALUES ($1, $2, $3)`,
-			segmentID, userID, expiresAt,
+			`INSERT INTO users_segments(segment_id, user_id, added_at, expires_at)
+			VALUES ($1, $2, $3, $4)`,
+			segmentID, userID, p.timeProvider.Now(), expiresAt,
 		)
 
 		if err != nil {
