@@ -1,6 +1,7 @@
 package integrationtest
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -58,7 +59,8 @@ func purgeDB(db *sql.DB) {
 
 func TestMain(m *testing.M) {
 	// Connect to postgres
-	db, err := sql.Open("pgx", pgURL)
+	var err error
+	db, err = sql.Open("pgx", pgURL)
 	if err != nil {
 		log.Fatal().Msg("Failed to open connection to postgres test instance")
 	}
@@ -135,4 +137,69 @@ func TestHealth(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, r.StatusCode)
 	assert.Equal(t, expected, got)
+}
+
+func TestCreateSegment(t *testing.T) {
+	url := server.URL + "/api/v1/segment/create"
+	// First request; should be successfull
+	{
+		var body bytes.Buffer
+		body.WriteString(`{"slug": "AVITO_TEST_SEGMENT"}`)
+
+		r, err := http.Post(url, "application/json", &body)
+		assert.NoError(t, err, "TestCreateSegment() - http.Post()")
+		defer r.Body.Close()
+
+		expected := v1.JsonStatus{Status: "OK"}
+		var got v1.JsonStatus
+
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("TestCreateSegment() - failed to unmarshall json")
+		}
+
+		assert.Equal(t, http.StatusOK, r.StatusCode)
+		assert.Equal(t, expected, got)
+	}
+
+	// Second request; should fail with 400 and JsonError
+	{
+		var body bytes.Buffer
+		body.WriteString(`{"slug": "AVITO_TEST_SEGMENT"}`)
+
+		r, err := http.Post(url, "application/json", &body)
+		assert.NoError(t, err, "TestCreateSegment() - http.Post()")
+		defer r.Body.Close()
+
+		expected := v1.JsonError{StatusCode: http.StatusBadRequest, Message: "Segment already exists"}
+		var got v1.JsonError
+
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("TestCreateSegment() - failed to unmarshall json")
+		}
+
+		assert.Equal(t, http.StatusBadRequest, r.StatusCode)
+		assert.Equal(t, expected, got)
+	}
+
+	// Third request; should fail with 400 and JsonError
+	{
+		var body bytes.Buffer
+		body.WriteString(`INVALID JSON`)
+
+		r, err := http.Post(url, "application/json", &body)
+		assert.NoError(t, err, "TestCreateSegment() - http.Post()")
+		defer r.Body.Close()
+
+		expected := v1.JsonError{StatusCode: http.StatusBadRequest, Message: "Error while unmarshalling request JSON"}
+		var got v1.JsonError
+
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("TestCreateSegment() - failed to unmarshall json")
+		}
+
+		assert.Equal(t, http.StatusBadRequest, r.StatusCode)
+		assert.Equal(t, expected, got)
+	}
+
+	purgeDB(db)
 }
