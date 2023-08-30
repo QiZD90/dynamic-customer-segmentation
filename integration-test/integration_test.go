@@ -6,11 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,14 +47,14 @@ func purgeDB(db *sql.DB) {
 	}
 	defer tx.Rollback()
 
-	_, err = tx.Exec("DELETE FROM segments")
-	if err != nil {
-		log.Fatal().Msg("purgeDB() - failed to delete from segments")
-	}
-
 	_, err = tx.Exec("DELETE FROM users_segments")
 	if err != nil {
 		log.Fatal().Msg("purgeDB() - failed to delete from users segments")
+	}
+
+	_, err = tx.Exec("DELETE FROM segments")
+	if err != nil {
+		log.Fatal().Msg("purgeDB() - failed to delete from segments")
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -96,7 +98,7 @@ func TestMain(m *testing.M) {
 	repo := postgres.NewWithExistingConnection(db, timeProvider)
 
 	// Create fstorage
-	fstorage, err := ondisk.New("http://localhost:80/csv/", "csv/", filestorage.NewUUIDFileStorageNameSupplier())
+	fstorage, err := ondisk.New("WOULD BE CHANGED", "csv/", filestorage.NewUUIDFileStorageNameSupplier())
 	if err != nil {
 		log.Fatal().Msg("Failed to create ondisk file storage")
 	}
@@ -113,6 +115,8 @@ func TestMain(m *testing.M) {
 	// Create the mux and start the server
 	mux := v1.NewMux(s)
 	server = httptest.NewServer(mux)
+
+	fstorage.BaseURL = server.URL + "/csv" // dirty hack sorry not sorry
 
 	fmt.Println("Listening at " + server.URL)
 
@@ -143,6 +147,8 @@ func TestHealth(t *testing.T) {
 }
 
 func TestCreateSegment(t *testing.T) {
+	defer purgeDB(db)
+
 	url := server.URL + "/api/v1/segment/create"
 	// First request; should be successfull
 	{
@@ -203,11 +209,11 @@ func TestCreateSegment(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, r.StatusCode)
 		assert.Equal(t, expected, got)
 	}
-
-	purgeDB(db)
 }
 
 func TestDeleteSegment(t *testing.T) {
+	defer purgeDB(db)
+
 	url := server.URL + "/api/v1/segment/delete"
 
 	// Create segment to be deleted
@@ -292,11 +298,11 @@ func TestDeleteSegment(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, r.StatusCode)
 		assert.Equal(t, expected, got)
 	}
-
-	purgeDB(db)
 }
 
 func TestGetSegmentsAndGetActiveSegments(t *testing.T) {
+	defer purgeDB(db)
+
 	hourAfterTimeBase := timeBase.Add(time.Hour)
 	twoHoursAfterTimeBase := timeBase.Add(2 * time.Hour)
 	defer timeProvider.SetTime(timeBase)
@@ -415,6 +421,103 @@ func TestGetSegmentsAndGetActiveSegments(t *testing.T) {
 		assert.Equal(t, http.StatusOK, r.StatusCode)
 		assert.True(t, reflect.DeepEqual(expected, got), "expected: %s, got: %s", expected, got)
 	}
+}
 
-	purgeDB(db)
+func TestCSV(t *testing.T) {
+	defer purgeDB(db)
+	defer timeProvider.SetTime(timeBase)
+
+	addAndDelete := func(slug string, userID int, timeAdd time.Time, timeDelete time.Time) {
+		timeProvider.SetTime(timeAdd)
+		assert.NoError(t, s.CreateSegment(slug))
+		assert.NoError(t, s.UpdateUserSegments(userID, []entity.SegmentExpiration{{Slug: slug}}, []entity.SegmentExpiration{}))
+		timeProvider.SetTime(timeDelete)
+		assert.NoError(t, s.DeleteSegment(slug))
+	}
+
+	addAndRemove := func(slug string, userID int, timeAdd time.Time, timeDelete time.Time) {
+		timeProvider.SetTime(timeAdd)
+		assert.NoError(t, s.CreateSegment(slug))
+		assert.NoError(t, s.UpdateUserSegments(userID, []entity.SegmentExpiration{{Slug: slug}}, []entity.SegmentExpiration{}))
+		timeProvider.SetTime(timeDelete)
+		assert.NoError(t, s.UpdateUserSegments(userID, []entity.SegmentExpiration{}, []entity.SegmentExpiration{{Slug: slug}}))
+	}
+
+	generateCSVString := func(userID int, operations []entity.Operation) string {
+		sb := strings.Builder{}
+
+		for _, o := range operations {
+			sb.WriteString(fmt.Sprintf("%d;%s;%s;%s\n", userID, o.SegmentSlug, o.Type, o.Time))
+		}
+
+		return sb.String()
+	}
+
+	// Create and delete/remove segments
+	addAndDelete("AVITO_OUT_OF_BOUNDS", 1021, timeBase.Add(-1*time.Hour*24*30), timeBase.Add(5*time.Hour*24*30))              // -1 month -- +5 months
+	addAndRemove("AVITO_IN_BOUNDS", 1021, timeBase, timeBase.Add(3*time.Hour*24*30))                                          // 0 -- +3 months
+	addAndDelete("AVITO_ONLY_ADD", 1021, timeBase.Add(2*time.Hour*24*30), timeBase.Add(4*time.Hour*24*30))                    // +2 months -- +4 months
+	addAndRemove("AVITO_ONLY_REMOVE", 1021, timeBase.Add(-2*time.Hour*24*30), timeBase.Add(2*time.Hour*24*30+4*time.Hour*24)) // -2 months -- +2 months + 4 days
+	addAndRemove("AVITO_TOO_EARLY", 1021, timeBase.Add(-4*time.Hour*24*30), timeBase.Add(-3*time.Hour*24*30))                 // -4 months -- -3 months
+	addAndRemove("AVITO_TOO_LATE", 1021, timeBase.Add(7*time.Hour*24*30), timeBase.Add(9*time.Hour*24*30))                    // +7 months -- +9 months
+
+	operations := []entity.Operation{
+		{UserID: 1021, SegmentSlug: "AVITO_IN_BOUNDS", Type: entity.AddedOperationType, Time: timeBase},
+		{UserID: 1021, SegmentSlug: "AVITO_IN_BOUNDS", Type: entity.RemovedOperationType, Time: timeBase.Add(3 * time.Hour * 24 * 30)},
+
+		{UserID: 1021, SegmentSlug: "AVITO_ONLY_ADD", Type: entity.AddedOperationType, Time: timeBase.Add(2 * time.Hour * 24 * 30)},
+		{UserID: 1021, SegmentSlug: "AVITO_ONLY_REMOVE", Type: entity.RemovedOperationType, Time: timeBase.Add(2*time.Hour*24*30 + 4*time.Hour*24)},
+	}
+	sort.Slice(operations, func(i, j int) bool { return operations[i].Time.Before(operations[j].Time) })
+	csv := generateCSVString(1021, operations)
+
+	link := ""
+	// Generate CSV
+	{
+		var b bytes.Buffer
+		from := timeBase
+		to := timeBase.Add(4 * 30 * time.Hour * 24) // +4 months
+		requestJson := fmt.Sprintf(`{
+			"user_id": 1021,
+			"from": {
+				"month": %d,
+				"year": %d
+			},
+			"to": {
+				"month": %d,
+				"year": %d
+			}
+		}`, from.Month(), from.Year(), to.Month(), to.Year())
+		b.WriteString(requestJson)
+		request, err := http.NewRequest("GET", server.URL+"/api/v1/user/csv", &b)
+		assert.NoError(t, err, "TestCSV() - http.NewRequest()")
+
+		r, err := http.DefaultClient.Do(request)
+		assert.NoError(t, err, "TestCSV() - http.Do()")
+		defer r.Body.Close()
+
+		var got v1.JsonLink
+
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("TestCSV() - failed to unmarshall json")
+		}
+
+		assert.Equal(t, http.StatusOK, r.StatusCode)
+		link = got.Link
+	}
+
+	// Fetch CSV
+	{
+		fmt.Println(link)
+		r, err := http.Get(link)
+		assert.NoError(t, err, "TestCSV() - http.Get()")
+		defer r.Body.Close()
+
+		b, err := io.ReadAll(r.Body)
+		assert.NoError(t, err, "TestCSV() - io.ReadAll()")
+		str := string(b)
+
+		assert.Equal(t, http.StatusOK, r.StatusCode)
+		assert.Equal(t, csv, str)
+	}
 }

@@ -26,6 +26,10 @@ services:
   postgres:
     container_name: test-postgres
     image: postgres:13.11-bullseye
+    environment:
+      - POSTGRES_USER=testuser
+      - POSTGRES_PASSWORD=testuserpassword
+      - POSTGRES_DB=testdb
     ports:
       - "5432"
     healthcheck:

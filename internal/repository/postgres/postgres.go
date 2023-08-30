@@ -306,6 +306,10 @@ func (p *PostgresRepository) GetActiveUserSegments(userID int) ([]entity.UserSeg
 	return userSegments, nil
 }
 
+func timeInBounds(t time.Time, timeFrom time.Time, timeTo time.Time) bool {
+	return (t.After(timeFrom) || t.Equal(timeFrom)) && t.Before(timeTo)
+}
+
 func (p *PostgresRepository) DumpHistory(userID int, timeFrom time.Time, timeTo time.Time) ([]entity.Operation, error) {
 	rows, err := p.db.Query(
 		`SELECT (SELECT slug FROM segments WHERE id=segment_id), user_id, added_at, removed_at, expires_at
@@ -326,14 +330,16 @@ func (p *PostgresRepository) DumpHistory(userID int, timeFrom time.Time, timeTo 
 
 		rows.Scan(&slug, &userID, &addedAt, &removedAt, &expiresAt)
 
-		operations = append(operations, entity.Operation{
-			UserID:      userID,
-			SegmentSlug: slug,
-			Type:        entity.AddedOperationType,
-			Time:        addedAt,
-		})
+		if timeInBounds(addedAt, timeFrom, timeTo) {
+			operations = append(operations, entity.Operation{
+				UserID:      userID,
+				SegmentSlug: slug,
+				Type:        entity.AddedOperationType,
+				Time:        addedAt,
+			})
+		}
 
-		if removedAt.Valid {
+		if removedAt.Valid && timeInBounds(removedAt.Time, timeFrom, timeTo) {
 			operations = append(operations, entity.Operation{
 				UserID:      userID,
 				SegmentSlug: slug,
@@ -342,7 +348,7 @@ func (p *PostgresRepository) DumpHistory(userID int, timeFrom time.Time, timeTo 
 			})
 		}
 
-		if expiresAt.Valid && expiresAt.Time.Before(p.timeProvider.Now()) {
+		if expiresAt.Valid && expiresAt.Time.Before(p.timeProvider.Now()) && timeInBounds(expiresAt.Time, timeFrom, timeTo) {
 			operations = append(operations, entity.Operation{
 				UserID:      userID,
 				SegmentSlug: slug,
