@@ -12,6 +12,7 @@ import (
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/filestorage/ondisk"
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/repository/postgres"
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/service"
+	"github.com/QiZD90/dynamic-customer-segmentation/internal/timeprovider/realtimeprovider"
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/userservice/usermicroservice"
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -36,7 +37,7 @@ func main() {
 	}
 
 	// Create repository
-	repo, err := postgres.New(cfg.Postgres.Addr)
+	repo, err := postgres.New(cfg.Postgres.Addr, realtimeprovider.New())
 	if err != nil {
 		log.Fatal().Err(err).Msg("error while connecting to postgres")
 	}

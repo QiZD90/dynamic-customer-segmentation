@@ -8,6 +8,7 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/entity"
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/repository"
+	"github.com/QiZD90/dynamic-customer-segmentation/internal/timeprovider/fixedtimeprovider"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -60,7 +61,7 @@ func TestCreateSegment(t *testing.T) {
 		defer db.Close()
 
 		// Create a mock repository
-		repo := &PostgresRepository{db}
+		repo := &PostgresRepository{db, fixedtimeprovider.New(time.Time{}.Add(3 * time.Hour))}
 
 		// Build the expectations
 		tt.expectations(mock)
@@ -123,7 +124,7 @@ func TestGetAllSegments(t *testing.T) {
 		defer db.Close()
 
 		// Create a mock repository
-		repo := &PostgresRepository{db}
+		repo := &PostgresRepository{db, fixedtimeprovider.New(time.Time{}.Add(3 * time.Hour))}
 
 		// Build the expectations
 		tt.expectations(mock)
@@ -135,6 +136,74 @@ func TestGetAllSegments(t *testing.T) {
 		}
 
 		assert.Equal(t, segments, tt.expectResult)
+
+		// we make sure that all expectations were met
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Errorf("there were unfulfilled expectations: %s", err)
+		}
+	}
+}
+
+func TestDumpHistory(t *testing.T) {
+	testCases := []struct {
+		name         string
+		expectations func(mock sqlmock.Sqlmock)
+		expectResult []entity.Operation
+		expectError  error
+	}{
+		{
+			name: "basic usage",
+			expectations: func(mock sqlmock.Sqlmock) {
+				mock.
+					ExpectQuery(`SELECT .+`).
+					WithArgs(1000).
+					WillReturnRows(sqlmock.
+						NewRows([]string{"slug", "user_id", "added_at", "removed_at", "expires_at"}).
+						AddRow("AVITO_TEST_SEGMENT", 1000, time.Time{}, sql.NullTime{}, sql.NullTime{}).
+						AddRow("AVITO_DELETED_SEGMENT", 1000, time.Time{}.Add(time.Minute), sql.NullTime{Valid: true, Time: time.Time{}.Add(time.Hour)}, sql.NullTime{}),
+					)
+			},
+			expectResult: []entity.Operation{
+				{UserID: 1000, SegmentSlug: "AVITO_TEST_SEGMENT", Type: entity.AddedOperationType, Time: time.Time{}},
+				{UserID: 1000, SegmentSlug: "AVITO_DELETED_SEGMENT", Type: entity.AddedOperationType, Time: time.Time{}.Add(time.Minute)},
+				{UserID: 1000, SegmentSlug: "AVITO_DELETED_SEGMENT", Type: entity.RemovedOperationType, Time: time.Time{}.Add(time.Hour)},
+			},
+			expectError: nil,
+		},
+		{
+			name: "no rows",
+			expectations: func(mock sqlmock.Sqlmock) {
+				mock.
+					ExpectQuery(`SELECT .+`).
+					WithArgs(1000).
+					WillReturnRows(sqlmock.NewRows([]string{"slug", "user_id", "added_at", "removed_at", "expires_at"}))
+			},
+			expectResult: []entity.Operation{},
+			expectError:  nil,
+		},
+	}
+
+	for _, tt := range testCases {
+		// Open stub DB connection
+		db, mock, err := sqlmock.New()
+		if err != nil {
+			t.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
+		}
+		defer db.Close()
+
+		// Create a mock repository
+		repo := &PostgresRepository{db, fixedtimeprovider.New(time.Time{}.Add(3 * time.Hour))}
+
+		// Build the expectations
+		tt.expectations(mock)
+
+		// Execute the method
+		operations, err := repo.DumpHistory(1000, time.Time{}, time.Time{}.Add(24*time.Hour))
+		if err != tt.expectError {
+			t.Errorf("wanted error: %s; got error: %s", tt.expectError, err)
+		}
+
+		assert.Equal(t, operations, tt.expectResult)
 
 		// we make sure that all expectations were met
 		if err := mock.ExpectationsWereMet(); err != nil {

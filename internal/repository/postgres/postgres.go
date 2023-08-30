@@ -9,11 +9,13 @@ import (
 
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/entity"
 	"github.com/QiZD90/dynamic-customer-segmentation/internal/repository"
+	"github.com/QiZD90/dynamic-customer-segmentation/internal/timeprovider"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
 type PostgresRepository struct {
-	db *sql.DB
+	db           *sql.DB
+	timeProvider timeprovider.TimeProvider
 }
 
 func (p *PostgresRepository) CreateSegment(slug string) error {
@@ -79,8 +81,8 @@ func (p *PostgresRepository) AddSegmentToUsers(slug string, userIDs []int) error
 			WHERE user_id=$1
 			AND segment_id=(SELECT id FROM segments WHERE slug=$2)
 			AND removed_at IS NULL
-			AND (expires_at IS NULL OR expires_at > NOW())`,
-			userID, slug,
+			AND (expires_at IS NULL OR expires_at > $3)`,
+			userID, slug, p.timeProvider.Now(),
 		)
 		if err := row.Scan(&cnt); err != nil {
 			return fmt.Errorf("AddSegmentToUsers() - tx.QueryRow(): %w", err)
@@ -133,17 +135,17 @@ func (p *PostgresRepository) DeleteSegment(slug string) error {
 	}
 
 	// mark the segment as deleted
-	_, err = tx.Exec("UPDATE segments SET deleted_at=NOW() WHERE slug=$1", slug)
+	_, err = tx.Exec("UPDATE segments SET deleted_at=$2 WHERE slug=$1", slug, p.timeProvider.Now())
 	if err != nil {
 		return fmt.Errorf("DeleteSegment() - tx.Exec(): %w", err)
 	}
 
 	// mark active user segments with this segment as removed
 	_, err = tx.Exec(
-		`UPDATE users_segments SET removed_at=NOW(), expires_at=NULL
+		`UPDATE users_segments SET removed_at=$2, expires_at=NULL
 		WHERE segment_id=(SELECT id FROM segments WHERE slug=$1)
 		AND removed_at IS NULL
-		AND (expires_at IS NULL OR expires_at > NOW())`, slug)
+		AND (expires_at IS NULL OR expires_at > $2)`, slug, p.timeProvider.Now())
 	if err != nil {
 		return fmt.Errorf("DeleteSegment() - tx.Exec(): %w", err)
 	}
@@ -188,8 +190,8 @@ func (p *PostgresRepository) UpdateUserSegments(userID int, addSegments []entity
 			WHERE user_id=$1
 			AND segment_id=$2
 			AND removed_at IS NULL
-			AND (expires_at IS NULL OR expires_at > NOW())`,
-			userID, segmentID,
+			AND (expires_at IS NULL OR expires_at > $3)`,
+			userID, segmentID, p.timeProvider.Now(),
 		)
 		if err := row.Scan(&cnt); err != nil {
 			return fmt.Errorf("UpdateUserSegments() - tx.QueryRow(): %w", err)
@@ -241,8 +243,8 @@ func (p *PostgresRepository) UpdateUserSegments(userID int, addSegments []entity
 			WHERE user_id=$1
 			AND segment_id=$2
 			AND removed_at IS NULL
-			AND (expires_at IS NULL OR expires_at > NOW())`,
-			userID, segmentID,
+			AND (expires_at IS NULL OR expires_at > $3)`,
+			userID, segmentID, p.timeProvider.Now(),
 		)
 		if err := row.Scan(&cnt); err != nil {
 			return fmt.Errorf("UpdateUserSegments() - tx.QueryRow(): %w", err)
@@ -255,10 +257,10 @@ func (p *PostgresRepository) UpdateUserSegments(userID int, addSegments []entity
 		// remove the segment
 		_, err := tx.Exec(
 			`UPDATE users_segments
-			SET removed_at=NOW()
+			SET removed_at=$3
 			WHERE user_id=$1
 			AND segment_id=$2`,
-			userID, segmentID,
+			userID, segmentID, p.timeProvider.Now(),
 		)
 		if err != nil {
 			return fmt.Errorf("UpdateUserSegments() - tx.Exec(): %w", err)
@@ -279,8 +281,8 @@ func (p *PostgresRepository) GetActiveUserSegments(userID int) ([]entity.UserSeg
 		FROM users_segments
 		WHERE user_id=$1
 		AND removed_at IS NULL
-		AND (expires_at IS NULL OR expires_at > NOW())`,
-		userID,
+		AND (expires_at IS NULL OR expires_at > $2)`,
+		userID, p.timeProvider.Now(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("GetActiveUserSegments() - p.db.Query(): %w", err)
@@ -340,7 +342,7 @@ func (p *PostgresRepository) DumpHistory(userID int, timeFrom time.Time, timeTo 
 			})
 		}
 
-		if expiresAt.Valid && expiresAt.Time.Before(time.Now()) {
+		if expiresAt.Valid && expiresAt.Time.Before(p.timeProvider.Now()) {
 			operations = append(operations, entity.Operation{
 				UserID:      userID,
 				SegmentSlug: slug,
@@ -397,7 +399,7 @@ func (p *PostgresRepository) GetAllSegments() ([]entity.Segment, error) {
 	return segments, nil
 }
 
-func New(postgresURL string) (*PostgresRepository, error) {
+func New(postgresURL string, timeProvider timeprovider.TimeProvider) (*PostgresRepository, error) {
 	db, err := sql.Open("pgx", postgresURL)
 	if err != nil {
 		return nil, err
@@ -409,6 +411,14 @@ func New(postgresURL string) (*PostgresRepository, error) {
 	}
 
 	return &PostgresRepository{
-		db: db,
+		db:           db,
+		timeProvider: timeProvider,
 	}, nil
+}
+
+func NewWithExistingConnection(db *sql.DB, timeProvider timeprovider.TimeProvider) *PostgresRepository {
+	return &PostgresRepository{
+		db:           db,
+		timeProvider: timeProvider,
+	}
 }
