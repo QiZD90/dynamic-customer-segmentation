@@ -11,7 +11,7 @@ type Segment struct {
 type UserSegment struct {
 	Slug      string     `json:"slug"`
 	AddedAt   time.Time  `json:"added_at"`
-	DeletedAt *time.Time `json:"deleted_at,omitempty"`
+	RemovedAt *time.Time `json:"removed_at,omitempty"`
 	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 

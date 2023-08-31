@@ -521,3 +521,192 @@ func TestCSV(t *testing.T) {
 		assert.Equal(t, csv, str)
 	}
 }
+
+func TestUserSegmentsAndUpdateUser(t *testing.T) {
+	defer purgeDB(db)
+	defer timeProvider.SetTime(timeBase)
+
+	yesterday := timeBase.Add(-1 * 24 * time.Hour)
+	tomorrow := timeBase.Add(24 * time.Hour)
+
+	userID := 1102
+	segments := []struct {
+		Slug      string
+		CreatedAt time.Time
+		AddedAt   time.Time
+		DeletedAt *time.Time
+		RemovedAt *time.Time
+		ExpiresAt *time.Time
+	}{
+		{Slug: "AVITO_SEGMENT_1", CreatedAt: timeBase.Add(-time.Hour), AddedAt: timeBase.Add(-time.Hour), DeletedAt: nil, ExpiresAt: nil},
+		{Slug: "AVITO_SEGMENT_2", CreatedAt: timeBase.Add(-3 * time.Minute), AddedAt: timeBase.Add(-time.Minute), DeletedAt: nil, ExpiresAt: nil},
+		{Slug: "AVITO_SEGMENT_3", CreatedAt: timeBase.Add(-time.Hour), AddedAt: timeBase, DeletedAt: nil, ExpiresAt: nil},
+		{Slug: "AVITO_EXPIRED", CreatedAt: timeBase.Add(-3 * 24 * time.Hour), AddedAt: timeBase.Add(-2 * 24 * time.Hour), ExpiresAt: &yesterday, DeletedAt: nil},
+		{Slug: "AVITO_NOT_YET_EXPIRED", CreatedAt: timeBase.Add(-3 * 24 * time.Hour), AddedAt: timeBase.Add(-2 * 24 * time.Hour), ExpiresAt: &tomorrow, DeletedAt: nil},
+		{Slug: "AVITO_DELETED", CreatedAt: timeBase.Add(-3 * 24 * time.Hour), AddedAt: timeBase.Add(-2 * 24 * time.Hour), ExpiresAt: nil, DeletedAt: &yesterday},
+		{Slug: "AVITO_REMOVED", CreatedAt: timeBase.Add(-3 * 24 * time.Hour), AddedAt: timeBase.Add(-2 * 24 * time.Hour), ExpiresAt: nil, RemovedAt: &yesterday},
+	}
+
+	for _, segment := range segments {
+		// Create segment
+		{
+			timeProvider.SetTime(segment.CreatedAt)
+
+			url := server.URL + "/api/v1/segment/create"
+
+			var body bytes.Buffer
+			fmt.Fprintf(&body, `{"slug": "%s"}`, segment.Slug)
+
+			r, err := http.Post(url, "application/json", &body)
+			assert.NoError(t, err, "TestUserSegmentsAndUpdateUser() - http.Post()")
+			defer r.Body.Close()
+
+			expected := v1.JsonStatus{Status: "OK"}
+			var got v1.JsonStatus
+
+			if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+				t.Fatalf("TestUserSegmentsAndUpdateUser() - failed to unmarshall json")
+			}
+
+			assert.Equal(t, http.StatusOK, r.StatusCode)
+			assert.Equal(t, expected, got)
+		}
+
+		// Add segment
+		{
+			timeProvider.SetTime(segment.AddedAt)
+
+			url := server.URL + "/api/v1/user/update"
+
+			request := &v1.JsonUserUpdateRequest{
+				UserID: userID,
+				AddSegments: []entity.SegmentExpiration{
+					{Slug: segment.Slug, ExpiresAt: segment.ExpiresAt},
+				},
+				RemoveSegments: []entity.SegmentExpiration{},
+			}
+			var body bytes.Buffer
+			if err := json.NewEncoder(&body).Encode(request); err != nil {
+				t.Fatalf("TestUserSegmentsAndUpdateUser() - failed to marshall json")
+			}
+
+			r, err := http.Post(url, "application/json", &body)
+			assert.NoError(t, err, "TestUserSegmentsAndUpdateUser() - http.Post()")
+			defer r.Body.Close()
+
+			expected := v1.JsonStatus{Status: "OK"}
+			var got v1.JsonStatus
+
+			if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+				t.Fatalf("TestUserSegmentsAndUpdateUser() - failed to unmarshall json")
+			}
+
+			assert.Equal(t, http.StatusOK, r.StatusCode)
+			assert.Equal(t, expected, got)
+		}
+
+		// Delete segment
+		if segment.DeletedAt != nil {
+			timeProvider.SetTime(*segment.DeletedAt)
+
+			url := server.URL + "/api/v1/segment/delete"
+
+			var body bytes.Buffer
+			fmt.Fprintf(&body, `{"slug": "%s"}`, segment.Slug)
+
+			r, err := http.Post(url, "application/json", &body)
+			assert.NoError(t, err, "TestUserSegmentsAndUpdateUser() - http.Post()")
+			defer r.Body.Close()
+
+			expected := v1.JsonStatus{Status: "OK"}
+			var got v1.JsonStatus
+
+			if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+				t.Fatalf("TestUserSegmentsAndUpdateUser() - failed to unmarshall json")
+			}
+
+			assert.Equal(t, http.StatusOK, r.StatusCode)
+			assert.Equal(t, expected, got)
+		}
+
+		// Remove segment
+		if segment.RemovedAt != nil {
+			timeProvider.SetTime(*segment.RemovedAt)
+
+			url := server.URL + "/api/v1/user/update"
+
+			request := &v1.JsonUserUpdateRequest{
+				UserID:      userID,
+				AddSegments: []entity.SegmentExpiration{},
+				RemoveSegments: []entity.SegmentExpiration{
+					{Slug: segment.Slug},
+				},
+			}
+			var body bytes.Buffer
+			if err := json.NewEncoder(&body).Encode(request); err != nil {
+				t.Fatalf("TestUserSegmentsAndUpdateUser() - failed to marshall json")
+			}
+
+			r, err := http.Post(url, "application/json", &body)
+			assert.NoError(t, err, "TestUserSegmentsAndUpdateUser() - http.Post()")
+			defer r.Body.Close()
+
+			expected := v1.JsonStatus{Status: "OK"}
+			var got v1.JsonStatus
+
+			if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+				t.Fatalf("TestUserSegmentsAndUpdateUser() - failed to unmarshall json")
+			}
+
+			assert.Equal(t, http.StatusOK, r.StatusCode)
+			assert.Equal(t, expected, got)
+		}
+	}
+
+	// Get user segments
+	{
+		timeProvider.SetTime(timeBase)
+
+		url := server.URL + "/api/v1/user/segments"
+
+		var body bytes.Buffer
+		fmt.Fprintf(&body, `{"user_id": %d}`, userID)
+
+		request, err := http.NewRequest("GET", url, &body)
+		assert.NoError(t, err, "TestUserSegmentsAndUpdateUser() - http.NewRequest()")
+
+		r, err := http.DefaultClient.Do(request)
+		assert.NoError(t, err, "TestUserSegmentsAndUpdateUser() - http.Do()")
+		defer r.Body.Close()
+
+		userSegments := make([]entity.UserSegment, 0, len(segments))
+		for _, segment := range segments {
+			if segment.DeletedAt != nil || segment.RemovedAt != nil || (segment.ExpiresAt != nil && segment.ExpiresAt.Before(timeProvider.Now())) {
+				continue
+			}
+
+			userSegments = append(userSegments, entity.UserSegment{
+				Slug:      segment.Slug,
+				AddedAt:   segment.AddedAt,
+				RemovedAt: segment.RemovedAt,
+				ExpiresAt: segment.ExpiresAt,
+			})
+		}
+
+		expected := v1.JsonUserSegments{
+			Segments: userSegments,
+		}
+		var got v1.JsonUserSegments
+
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("TestUserSegmentsAndUpdateUser() - failed to unmarshall json")
+		}
+
+		// sort by slug ascending
+		sort.Slice(expected.Segments, func(i, j int) bool { return expected.Segments[i].Slug < expected.Segments[j].Slug })
+		sort.Slice(got.Segments, func(i, j int) bool { return got.Segments[i].Slug < got.Segments[j].Slug })
+
+		assert.Equal(t, http.StatusOK, r.StatusCode)
+		assert.True(t, reflect.DeepEqual(expected, got), "expected: %s; got: %s", expected, got)
+	}
+}
