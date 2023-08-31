@@ -710,3 +710,59 @@ func TestUserSegmentsAndUpdateUser(t *testing.T) {
 		assert.True(t, reflect.DeepEqual(expected, got), "expected: %s; got: %s", expected, got)
 	}
 }
+
+func TestCreateAndEnroll(t *testing.T) {
+	defer purgeDB(db)
+	defer timeProvider.SetTime(timeBase)
+
+	var userIDs []int
+	// Create segment and enroll
+	{
+		url := server.URL + "/api/v1/segment/create/enroll"
+
+		var body bytes.Buffer
+		fmt.Fprintf(&body, `{"slug": "%s", "percent": %d}`, "AVITO_TEST_SEGMENT", 3)
+
+		r, err := http.Post(url, "application/json", &body)
+		assert.NoError(t, err, "TestCreateAndEnroll() - http.Post()")
+		defer r.Body.Close()
+
+		var got v1.JsonUserIDs
+
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("TestCreateAndEnroll() - failed to unmarshall json")
+		}
+
+		assert.Equal(t, http.StatusOK, r.StatusCode)
+		userIDs = got.UserIDs
+	}
+
+	// Verify that everybody has it
+	for _, userID := range userIDs {
+		url := server.URL + "/api/v1/user/segments"
+
+		var body bytes.Buffer
+		fmt.Fprintf(&body, `{"user_id": %d}`, userID)
+
+		request, err := http.NewRequest("GET", url, &body)
+		assert.NoError(t, err, "TestCreateAndEnroll() - http.NewRequest()")
+
+		r, err := http.DefaultClient.Do(request)
+		assert.NoError(t, err, "TestCreateAndEnroll() - http.Do()")
+		defer r.Body.Close()
+
+		expected := v1.JsonUserSegments{
+			Segments: []entity.UserSegment{
+				{Slug: "AVITO_TEST_SEGMENT", AddedAt: timeBase},
+			},
+		}
+		var got v1.JsonUserSegments
+
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("TestCreateAndEnroll() - failed to unmarshall json")
+		}
+
+		assert.Equal(t, http.StatusOK, r.StatusCode)
+		assert.True(t, reflect.DeepEqual(expected, got), "expected: %s; got: %s", expected, got)
+	}
+}
